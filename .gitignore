@@ -1,0 +1,8 @@
+*.class
+project/project
+project/target
+snapshots
+target
+*application.conf
+.idea
+.idea_modules
