@@ -71,6 +71,7 @@ trait FetchInstance[Return, Request[+_]] {
     Fetch( () => Blocked(Seq(br),cont) )
   }
 
+  /*
   type Interpreter[A] = Request[A] => Future[A]
 
   def processBlockedRequest[A<:Return](interpreter: Interpreter[A])(br: BlockedRequest[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
@@ -81,17 +82,21 @@ trait FetchInstance[Return, Request[+_]] {
     }
   }
 
+
   def processBlockedRequests(br: Seq[BlockedRequest[Return]])(implicit executionContext: ExecutionContext, interpreter: Interpreter[Return]): Future[Unit] = {
     for {
       _ <- Future.traverse(br)(processBlockedRequest(interpreter))
     } yield ()
   }
+  */
+  
+  type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
-  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, interpreter: Interpreter[Return]): Future[A] = {
+  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, fetcher: Fetcher): Future[A] = {
     fetch.result() match {
       case Done(a) => Future.successful(a)
       case Blocked(br,cont) =>
-        processBlockedRequests(br).flatMap { _ =>
+        fetcher(br).flatMap { _ =>
           runFetch(cont)
         }
     }
