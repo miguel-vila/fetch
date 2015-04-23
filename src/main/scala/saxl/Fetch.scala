@@ -22,7 +22,7 @@ trait FetchInstance[Return, Request[+_]] {
   case class Blocked[A](blockedRequests: Seq[BlockedRequest[Return]], continuation: Fetch[A]) extends Result[A]
   case class Throw(throwable: Throwable) extends Result[Nothing]
 
-  case class Fetch[+A](result: DataCache => Result[A]) {
+  case class Fetch[+A](result: Atom[DataCache] => Result[A]) {
 
     def flatMap[B](f: A => Fetch[B]): Fetch[B] = Fetch { dc =>
       result(dc) match {
@@ -59,13 +59,30 @@ trait FetchInstance[Return, Request[+_]] {
   }
 
   def dataFetch[A<:Return](request: Request[A]): Fetch[A] = {
-    val box = Atom[FetchStatus[A]](NotFetched)
-    val br = BlockedRequest(request, box)
-    val cont = Fetch { _ =>
-      val FetchSuccess(a) = box()
+    def cont(box: Atom[FetchStatus[A]]) = Fetch { _ =>
+      val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [runFetch]
       Done(a)
     }
-    Fetch( _ => Blocked(Seq(br),cont) )
+    Fetch { dca =>
+      val dc = dca()
+      dc.lookup(request) match {
+        case None =>
+          val box = Atom[FetchStatus[A]](NotFetched)
+          dca.update(dc.insert(request,box))
+          val br = BlockedRequest( request, box )
+          Blocked(Seq(br), cont(box))
+        case Some(box) =>
+          box() match {
+            case NotFetched =>
+              val br = BlockedRequest( request, box )
+              Blocked(Seq(br), cont(box))
+            case FetchSuccess(value) =>
+              Done(value)
+            case FetchFailure(t) =>
+              Throw(t)
+          }
+      }
+    }
   }
 
   /*
@@ -90,7 +107,7 @@ trait FetchInstance[Return, Request[+_]] {
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
   def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, dataCache: DataCache, fetcher: Fetcher): Future[A] = {
-    fetch.result(dataCache) match {
+    fetch.result(Atom(dataCache)) match {
       case Done(a)          => Future.successful(a)
       case Throw(t)         => Future.failed(t)
       case Blocked(br,cont) =>
