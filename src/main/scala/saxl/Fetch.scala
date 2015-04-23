@@ -17,7 +17,7 @@ trait FetchInstance[Return, Request[+_]] {
 
   case class BlockedRequest[+A<:Return](val request: Request[A], val fetchStatus: Atom[FetchStatus[A]])
 
-  trait Result[+A]
+  sealed trait Result[+A]
   case class Done[A](value: A) extends Result[A]
   case class Blocked[A](blockedRequests: Seq[BlockedRequest[Return]], continuation: Fetch[A]) extends Result[A]
   case class Throw(throwable: Throwable) extends Result[Nothing]
@@ -54,8 +54,11 @@ trait FetchInstance[Return, Request[+_]] {
       (ra, rf) match {
         case (Done(a)           , Done(f)           ) => Done(f(a))
         case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ap(ca)(unit[A => B](f)))
+        case (_throw:Throw      , Done(f)           ) => _throw
         case (Done(a)           , Blocked(br, cf)   ) => Blocked(br, ap(unit(a))(cf))
         case (Blocked(bra, ca)  , Blocked(brf, cf)  ) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ap(ca)(cf))
+        case (Throw(t)          , Blocked(brf,cf)   ) => Blocked(brf, ap(throwF(t))(cf))
+        case (_                 , _throw: Throw     ) => _throw
       }
     }
 
@@ -89,7 +92,7 @@ trait FetchInstance[Return, Request[+_]] {
     } yield ()
   }
   */
-  
+
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
   def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, fetcher: Fetcher): Future[A] = {
