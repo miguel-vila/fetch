@@ -32,13 +32,7 @@ trait FetchInstance[Return, Request[+_]] {
       }
     }
 
-    def map[B](f: A => B): Fetch[B] = Fetch { dc =>
-      result(dc) match {
-        case Done(a)          => Done(f(a))
-        case Blocked(br,cont) => Blocked(br, cont map f)
-        case _throw: Throw    => _throw
-      }
-    }
+    def map[B](f: A => B): Fetch[B] = flatMap { f andThen Fetch.unit }
 
   }
 
