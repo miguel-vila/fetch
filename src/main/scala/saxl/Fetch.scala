@@ -22,18 +22,18 @@ trait FetchInstance[Return, Request[+_]] {
   case class Blocked[A](blockedRequests: Seq[BlockedRequest[Return]], continuation: Fetch[A]) extends Result[A]
   case class Throw(throwable: Throwable) extends Result[Nothing]
 
-  case class Fetch[+A](result: () => Result[A]) {
+  case class Fetch[+A](result: DataCache => Result[A]) {
 
-    def flatMap[B](f: A => Fetch[B]): Fetch[B] = {
-      result() match {
-        case Done(a)            => f(a)
-        case Blocked(br, cont)  => Fetch { () => Blocked(br, cont flatMap f) }
-        case Throw(throwable)   => Fetch.throwF(throwable)
+    def flatMap[B](f: A => Fetch[B]): Fetch[B] = Fetch { dc =>
+      result(dc) match {
+        case Done(a)            => f(a).result(dc)
+        case Blocked(br, cont)  => Blocked(br, cont flatMap f)
+        case _throw : Throw     => _throw
       }
     }
 
-    def map[B](f: A => B): Fetch[B] = Fetch { () =>
-      result() match {
+    def map[B](f: A => B): Fetch[B] = Fetch { dc =>
+      result(dc) match {
         case Done(a)          => Done(f(a))
         case Blocked(br,cont) => Blocked(br, cont map f)
         case _throw: Throw    => _throw
@@ -44,13 +44,13 @@ trait FetchInstance[Return, Request[+_]] {
 
   object Fetch {
 
-    def unit[A](a: A): Fetch[A] = Fetch[A](() => Done(a))
+    def unit[A](a: A): Fetch[A] = Fetch[A](_ => Done(a))
 
-    def throwF[A](throwable: Throwable): Fetch[A] = Fetch(() => Throw(throwable))
+    def throwF[A](throwable: Throwable): Fetch[A] = Fetch(_ => Throw(throwable))
 
-    def ap[A, B](fa: => Fetch[A])(ff: => Fetch[A => B]): Fetch[B] = Fetch { () =>
-      val ra = fa.result()
-      val rf = ff.result()
+    def ap[A, B](fa: => Fetch[A])(ff: => Fetch[A => B]): Fetch[B] = Fetch { dc =>
+      val ra = fa.result(dc)
+      val rf = ff.result(dc)
       (ra, rf) match {
         case (Done(a)           , Done(f)           ) => Done(f(a))
         case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ap(ca)(unit[A => B](f)))
@@ -67,11 +67,11 @@ trait FetchInstance[Return, Request[+_]] {
   def dataFetch[A<:Return](request: Request[A]): Fetch[A] = {
     val box = Atom[FetchStatus[A]](NotFetched)
     val br = BlockedRequest(request, box)
-    val cont = Fetch { () =>
+    val cont = Fetch { _ =>
       val FetchSuccess(a) = box()
       Done(a)
     }
-    Fetch( () => Blocked(Seq(br),cont) )
+    Fetch( _ => Blocked(Seq(br),cont) )
   }
 
   /*
@@ -95,9 +95,10 @@ trait FetchInstance[Return, Request[+_]] {
 
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
-  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, fetcher: Fetcher): Future[A] = {
-    fetch.result() match {
-      case Done(a) => Future.successful(a)
+  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, dataCache: DataCache, fetcher: Fetcher): Future[A] = {
+    fetch.result(dataCache) match {
+      case Done(a)          => Future.successful(a)
+      case Throw(t)         => Future.failed(t)
       case Blocked(br,cont) =>
         fetcher(br).flatMap { _ =>
           runFetch(cont)
