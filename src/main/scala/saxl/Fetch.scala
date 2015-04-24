@@ -111,8 +111,8 @@ trait FetchInstance[Return, Request[+_]] {
 
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
-  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, dataCache: DataCache, fetcher: Fetcher): Future[A] = {
-    fetch.result(Atom(dataCache)) match {
+  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, dataCache: Atom[DataCache], fetcher: Fetcher): Future[A] = {
+    fetch.result(dataCache) match {
       case Done(a)          => Future.successful(a)
       case Throw(t)         => Future.failed(t)
       case Blocked(br,cont) =>
