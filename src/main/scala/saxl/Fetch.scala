@@ -4,6 +4,10 @@ import scala.collection.immutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scalaz.{ Applicative , Traverse }
 
+//@TODO:
+// una mejor estructura de tipos para que todas
+// las cosas se puedan instanciar sin tener que referirse
+// a unos tipos por parámetro, tal vez con una typeclass
 trait FetchInstance[Return, Request[+_]] {
 
   sealed trait FetchStatus[+T]
@@ -77,14 +81,16 @@ trait FetchInstance[Return, Request[+_]] {
       val dc = dca()
       dc.lookup(request) match {
         case None =>
+          println("Not in the cache")
           val box = Atom[FetchStatus[A]](NotFetched)
           dca.update(dc.insert(request,box))
           val br = BlockedRequest( request, box )
           Blocked(Seq(br), cont(box))
         case Some(box) =>
+          println("Cache hit!")
           box() match {
-            case NotFetched           => Blocked(Seq.empty, cont(box))
-            case FetchSuccess(value)  => Done(value)
+            case NotFetched           => println("cache slot will be filled"); Blocked(Seq.empty, cont(box))
+            case FetchSuccess(value)  => println("Succesfully retrieved from cache"); Done(value)
             case FetchFailure(t)      => Throw(t)
           }
       }
