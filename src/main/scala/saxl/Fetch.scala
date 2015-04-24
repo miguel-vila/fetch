@@ -13,7 +13,7 @@ trait FetchInstance[Return, Request[+_]] {
 
   case class DataCache(private val map: HashMap[Request[Return],Atom[FetchStatus[Return]]] = new HashMap[Request[Return],Atom[FetchStatus[Return]]]) {
     def lookup[A<:Return](r: Request[A]): Option[Atom[FetchStatus[A]]] = map.get(r).map(_.asInstanceOf[Atom[FetchStatus[A]]])
-    def insert[A<:Return](r: Request[A], v: Atom[FetchStatus[A]]): Unit = map + (r -> v)
+    def insert[A<:Return](r: Request[A], v: Atom[FetchStatus[A]]): DataCache = DataCache(map + (r -> v))
   }
 
   case class BlockedRequest[+A<:Return](val request: Request[A], val fetchStatus: Atom[FetchStatus[A]])
@@ -44,6 +44,7 @@ trait FetchInstance[Return, Request[+_]] {
     def throwF[A](throwable: Throwable): Fetch[A] = Fetch(_ => Throw(throwable))
 
     def ap[A, B](fa: => Fetch[A])(ff: => Fetch[A => B]): Fetch[B] = Fetch { dc =>
+      println(s"ap $fa $ff")
       val ra = fa.result(dc)
       val rf = ff.result(dc)
       (ra, rf) match {
