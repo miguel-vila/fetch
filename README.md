@@ -2,7 +2,7 @@
 
 Una prueba de concepto para implementar [haxl](http://community.haskell.org/~simonmar/papers/haxl-icfp14.pdf) en Scala, tal vez ingenuamente. Usa la librería estándar de Futuros para la ejecución y scalaz para ayuda sintáctica de aplicativos.
 
-Un ejemplo de su potencial uso, tomado del artículo, se encuentra [acá](https://github.com/miguel-vila/haxl-poc/blob/5b26a401313c3e9563aadec728f38ce57d22cee7/src/main/scala/saxl/Example.scala#L82).
+Un ejemplo de su potencial uso, tomado del artículo, se encuentra [acá](https://github.com/miguel-vila/haxl-poc/blob/37771fe7f3fdcd46d50d55aaf4376ac4eaf38f23/src/main/scala/saxl/Example.scala#L78).
 
 **@TODO:**
 
