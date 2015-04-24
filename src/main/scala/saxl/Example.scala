@@ -13,40 +13,37 @@ import scalaz.std.stream.streamInstance
 /**
  * Tipos bases
  */
-trait ExampleReturn
-trait ExampleRequest[+T]
-
-class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
+class Example extends FetchInstance  {
 
   println("Example")
 
   /**
    * Tipos que representan las posibles respuestas de un servicio
    */
-  case class PostId(id: Int) extends ExampleReturn
-  case class PostViews(views: Int) extends ExampleReturn
+  type PostId = Int
+  type PostViews = Int
   type PostDate = Date
 
-  trait PostContent extends ExampleReturn
+  trait PostContent
   object PostContent extends PostContent
 
   case class PostInfo(
                        postId: PostId,
                        postDate: PostDate,
-                       postTopic: String) extends ExampleReturn
+                       postTopic: String)
 
-  case class PostIds(postIds: Stream[PostId]) extends ExampleReturn
+  type PostIds = Stream[PostId]
 
   /**
    * Tipos que representan los requests que atienden los servicios
    */
-  case object GetPostIds extends ExampleRequest[PostIds]
+  case object GetPostIds extends Request[PostIds]
 
-  case class GetPostInfo(postId: PostId) extends ExampleRequest[PostInfo]
+  case class GetPostInfo(postId: PostId) extends Request[PostInfo]
 
-  case class GetPostContent(postId: PostId) extends ExampleRequest[PostContent]
+  case class GetPostContent(postId: PostId) extends Request[PostContent]
 
-  case class GetPostViews(postId: PostId) extends ExampleRequest[PostViews]
+  case class GetPostViews(postId: PostId) extends Request[PostViews]
 
   /**
    * Valores/Funciones Fetch que representan los queries básicos
@@ -62,11 +59,10 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
 
   def getPostViews(postId: PostId) = dataFetch(GetPostViews(postId))
 
-
   /**
    * Representa un documento HTML
    */
-  trait HTML extends ExampleReturn
+  trait HTML
   object HTML extends HTML
 
   /**
@@ -81,7 +77,7 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
   /**
    * Composición de servicios / Lógica de negocio
    */
-  val getAllPostsInfo: Fetch[Stream[PostInfo]] = getPostIds.flatMap { case PostIds(postIds) =>
+  val getAllPostsInfo: Fetch[Stream[PostInfo]] = getPostIds.flatMap { postIds =>
     Fetch.traverse(postIds)(getPostInfo)
   }
 
@@ -100,9 +96,8 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
 
   val popularPosts: Fetch[HTML] = for {
     postIds <- getPostIds
-    pids = postIds.postIds
-    views <- Fetch.traverse(pids)(getPostViews)
-    ordered = (pids zip views).sortBy(_._2.views).map(_._1).take(5)
+    views <- Fetch.traverse(postIds)(getPostViews)
+    ordered = (postIds zip views).sortBy(_._2).map(_._1).take(5)
     content <- Fetch.traverse(ordered)(getPostDetails)
   } yield renderPostList(content)
 
@@ -116,22 +111,21 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
 
   val pageHTML: Fetch[HTML] = (leftPane |@| mainPane)(renderPage)
 
-
   /**
    * Implementaciones de los servicios base
    */
   def getPostIdsImpl(): Future[PostIds] = {
-    Future.successful(PostIds(Stream(PostId(1),PostId(2),PostId(3),PostId(4),PostId(5),PostId(6),PostId(7))))
+    Future.successful(Stream(1,2,3,4,5,6,7))
   }
 
   val postInfoData = Map(
-    PostId(1) -> PostInfo(PostId(1),new Date(),"topic post 1"),
-    PostId(2) -> PostInfo(PostId(2),new Date(),"topic post 2"),
-    PostId(3) -> PostInfo(PostId(3),new Date(),"topic post 3"),
-    PostId(4) -> PostInfo(PostId(4),new Date(),"topic post 4"),
-    PostId(5) -> PostInfo(PostId(5),new Date(),"topic post 5"),
-    PostId(6) -> PostInfo(PostId(6),new Date(),"topic post 6"),
-    PostId(7) -> PostInfo(PostId(7),new Date(),"topic post 7")
+    1 -> PostInfo(1,new Date(),"topic post 1"),
+    2 -> PostInfo(2,new Date(),"topic post 2"),
+    3 -> PostInfo(3,new Date(),"topic post 3"),
+    4 -> PostInfo(4,new Date(),"topic post 4"),
+    5 -> PostInfo(5,new Date(),"topic post 5"),
+    6 -> PostInfo(6,new Date(),"topic post 6"),
+    7 -> PostInfo(7,new Date(),"topic post 7")
   )
 
   def getPostInfoImpl(postId: PostId): Future[PostInfo] = {
@@ -143,28 +137,28 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
   }
 
   val postViewsData = Map(
-    PostId(1) -> 1,
-    PostId(2) -> 2,
-    PostId(3) -> 3,
-    PostId(4) -> 4,
-    PostId(5) -> 5,
-    PostId(6) -> 6,
-    PostId(7) -> 7
+    1 -> 10,
+    2 -> 20,
+    3 -> 30,
+    4 -> 40,
+    5 -> 50,
+    6 -> 60,
+    7 -> 70
   )
 
   def getPostViewsImpl(postId: PostId): Future[PostViews] = {
-    Future.successful(PostViews(postViewsData(postId)))
+    Future.successful(postViewsData(postId))
   }
 
   /**
    * Función que ejecuta un query y realiza el side effect correspondiente
    */
-  def processExampleRequest(br: BlockedRequest[ExampleReturn])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    br.request match {
-      case GetPostIds             => processBlockedRequest( br, getPostIdsImpl() )
-      case GetPostInfo(postId)    => processBlockedRequest( br, getPostInfoImpl(postId) )
-      case GetPostContent(postId) => processBlockedRequest( br, getPostContentImpl(postId) )
-      case GetPostViews(postId)   => processBlockedRequest( br, getPostViewsImpl(postId) )
+  def processRequest(br: BlockedRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
+    br match {
+      case bra @ BlockedRequest(GetPostIds,_)             => processBlockedRequest( bra, getPostIdsImpl() )
+      case bra @ BlockedRequest(GetPostInfo(postId),_)    => processBlockedRequest( bra, getPostInfoImpl(postId) )
+      case bra @ BlockedRequest(GetPostContent(postId),_) => processBlockedRequest( bra, getPostContentImpl(postId) )
+      case bra @ BlockedRequest(GetPostViews(postId),_)   => processBlockedRequest( bra, getPostViewsImpl(postId) )
     }
   }
 
@@ -175,9 +169,9 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
    * servicio se ejecuta independientemente de los otros. Dado que las funciones
    * de tipo [[Fetcher]] reciben multiples [[BlockedRequest]] esto se podria implementar.
    */
-  def fetcher(br: Seq[BlockedRequest[ExampleReturn]])(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def fetcher(br: Seq[BlockedRequest[_]])(implicit executionContext: ExecutionContext): Future[Unit] = {
     for {
-      _ <- Future.traverse(br)(processExampleRequest)
+      _ <- Future.traverse(br)(processRequest)
     } yield ()
   }
 
@@ -193,7 +187,9 @@ object Test extends Example with App {
    * Ejecucion
    */
   runFetch(pageHTML, fetcher).onComplete {
-    case Success(html) => println(s"Success!: $html")
+    case Success(html) =>
+      println(s"Success!: $html")
+      println(cache)
     case Failure(t) => println(s"Failure: $t")
   }
 
