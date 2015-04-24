@@ -4,6 +4,8 @@ Una prueba de concepto para implementar [haxl](http://community.haskell.org/~sim
 
 Por ahora el uso es medianamente torpe debido a la jerarquía de tipos. Tal vez esto se pueda solucionar definiendo una Typeclass. 
 
+Un ejemplo de su potencial uso, tomado del artículo, se encuentra [acá](https://github.com/miguel-vila/haxl-poc/blob/master/src/main/scala/saxl/Example.scala#L85).
+
 **@TODO:**
 
 * [Una mejor estructura de tipos](https://github.com/miguel-vila/haxl-poc/blob/4febb9f694621946c99df1e7528dc3bfadf6a8bc/src/main/scala/saxl/Fetch.scala#L7) que permita un uso más fácil y que a su vez permita separar en distintos archivos la implementación.
