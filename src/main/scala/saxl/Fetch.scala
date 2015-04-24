@@ -11,7 +11,7 @@ trait FetchInstance[Return, Request[+_]] {
   case class FetchSuccess[T](value: T) extends FetchStatus[T]
   case class FetchFailure(t: Throwable) extends FetchStatus[Nothing]
 
-  case class DataCache(private val map: HashMap[Request[Return],Atom[FetchStatus[Return]]]) {
+  case class DataCache(private val map: HashMap[Request[Return],Atom[FetchStatus[Return]]] = new HashMap[Request[Return],Atom[FetchStatus[Return]]]) {
     def lookup[A<:Return](r: Request[A]): Option[Atom[FetchStatus[A]]] = map.get(r).map(_.asInstanceOf[Atom[FetchStatus[A]]])
     def insert[A<:Return](r: Request[A], v: Atom[FetchStatus[A]]): Unit = map + (r -> v)
   }
@@ -90,6 +90,21 @@ trait FetchInstance[Return, Request[+_]] {
     }
   }
 
+  /**
+   * Función utilitaria para setear el fetchStatus de un BloquedRequest
+   * una vez se haya completado el Futuro
+   *
+   * Puede ser utilizada por implementaciones
+   */
+  def processBlockedRequest[A<:Return](br: BlockedRequest[A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
+    futureImpl map { a =>
+      br.fetchStatus.update(FetchSuccess(a))
+    } recover { case t: Throwable =>
+      br.fetchStatus.update(FetchFailure(t))
+    }
+  }
+
+
   /*
   type Interpreter[A] = Request[A] => Future[A]
 
@@ -111,13 +126,13 @@ trait FetchInstance[Return, Request[+_]] {
 
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
-  def runFetch[A](fetch: Fetch[A])(implicit executionContext: ExecutionContext, dataCache: Atom[DataCache], fetcher: Fetcher): Future[A] = {
+  def runFetch[A](fetch: Fetch[A], fetcher: Fetcher)(implicit executionContext: ExecutionContext, dataCache: Atom[DataCache]): Future[A] = {
     fetch.result(dataCache) match {
       case Done(a)          => Future.successful(a)
       case Throw(t)         => Future.failed(t)
       case Blocked(br,cont) =>
         fetcher(br).flatMap { _ =>
-          runFetch(cont)
+          runFetch(cont,fetcher)
         }
     }
   }
