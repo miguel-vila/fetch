@@ -180,16 +180,9 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
   }
 
   /**
-   * Ejecución
-   */
-
-  import scala.concurrent.ExecutionContext.Implicits.global
-
-
-  /**
    * Función que ejecuta un query y realiza el side effect correspondiente
    */
-  def processExampleRequest(br: BlockedRequest[ExampleReturn]): Future[Unit] = {
+  def processExampleRequest(br: BlockedRequest[ExampleReturn])(implicit executionContext: ExecutionContext): Future[Unit] = {
     br.request match {
       case GetPostIds             => processBlockedRequest( br, getPostIdsImpl() )
       case GetPostInfo(postId)    => processBlockedRequest( br, getPostInfoImpl(postId) )
@@ -198,7 +191,14 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
     }
   }
 
-  def fetcher(br: Seq[BlockedRequest[ExampleReturn]]): Future[Unit] = {
+  /**
+   * Fetcher que utiliza la anterior funcion para ejecutar de forma independiente
+   * cada servicio. Es posible que dados multiples servicios uno quiera agrupar
+   * requests a la misma fuente de datos. En este ejemplo no se hace eso, cada
+   * servicio se ejecuta independientemente de los otros. Dado que las funciones
+   * de tipo [[Fetcher]] reciben multiples [[BlockedRequest]] esto se podria implementar.
+   */
+  def fetcher(br: Seq[BlockedRequest[ExampleReturn]])(implicit executionContext: ExecutionContext): Future[Unit] = {
     for {
       _ <- Future.traverse(br)(processExampleRequest)
     } yield ()
@@ -212,6 +212,9 @@ object Test extends Example with App {
   implicit val cache = Atom(DataCache())
   println("About to run")
 
+  /**
+   * Ejecucion
+   */
   runFetch(pageHTML, fetcher).onComplete {
     case Success(html) => println(s"Success!: $html")
     case Failure(t) => println(s"Failure: $t")

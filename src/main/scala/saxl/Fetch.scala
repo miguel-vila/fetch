@@ -105,26 +105,6 @@ trait FetchInstance[Return, Request[+_]] {
     }
   }
 
-
-  /*
-  type Interpreter[A] = Request[A] => Future[A]
-
-  def processBlockedRequest[A<:Return](interpreter: Interpreter[A])(br: BlockedRequest[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    interpreter(br.request) map { a =>
-      br.fetchStatus.update(FetchSuccess(a))
-    } recover { case t: Throwable =>
-      br.fetchStatus.update(FetchFailure(t))
-    }
-  }
-
-
-  def processBlockedRequests(br: Seq[BlockedRequest[Return]])(implicit executionContext: ExecutionContext, interpreter: Interpreter[Return]): Future[Unit] = {
-    for {
-      _ <- Future.traverse(br)(processBlockedRequest(interpreter))
-    } yield ()
-  }
-  */
-
   type Fetcher = Seq[BlockedRequest[Return]] => Future[Unit]
 
   def runFetch[A](fetch: Fetch[A], fetcher: Fetcher)(implicit executionContext: ExecutionContext, dataCache: Atom[DataCache]): Future[A] = {
