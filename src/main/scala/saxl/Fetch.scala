@@ -28,6 +28,7 @@ trait FetchInstance[Return, Request[+_]] {
   case class Throw(throwable: Throwable) extends Result[Nothing]
 
   case class Fetch[+A](result: Atom[DataCache] => Result[A]) {
+    import Fetch._
 
     def flatMap[B](f: A => Fetch[B]): Fetch[B] = Fetch { dc =>
       result(dc) match {
@@ -39,6 +40,20 @@ trait FetchInstance[Return, Request[+_]] {
 
     def map[B](f: A => B): Fetch[B] = flatMap { f andThen Fetch.unit }
 
+    def ap[B](ff: => Fetch[A => B]): Fetch[B] = Fetch { dc =>
+      val ra = result(dc)
+      val rf = ff.result(dc)
+      (ra, rf) match {
+        case (Done(a)           , Done(f)           ) => Done(f(a))
+        case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ca.ap(unit[A => B](f)))
+        case (_throw:Throw      , Done(f)           ) => _throw
+        case (Done(a)           , Blocked(br, cf)   ) => Blocked(br, unit(a).ap(cf))
+        case (Blocked(bra, ca)  , Blocked(brf, cf)  ) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ca.ap(cf))
+        case (Throw(t)          , Blocked(brf,cf)   ) => Blocked(brf, throwF(t).ap(cf))
+        case (_                 , _throw: Throw     ) => _throw
+      }
+    }
+
   }
 
   object Fetch {
@@ -47,25 +62,10 @@ trait FetchInstance[Return, Request[+_]] {
 
     def throwF[A](throwable: Throwable): Fetch[A] = Fetch(_ => Throw(throwable))
 
-    def ap[A, B](fa: => Fetch[A])(ff: => Fetch[A => B]): Fetch[B] = Fetch { dc =>
-      println(s"ap $fa $ff")
-      val ra = fa.result(dc)
-      val rf = ff.result(dc)
-      (ra, rf) match {
-        case (Done(a)           , Done(f)           ) => Done(f(a))
-        case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ap(ca)(unit[A => B](f)))
-        case (_throw:Throw      , Done(f)           ) => _throw
-        case (Done(a)           , Blocked(br, cf)   ) => Blocked(br, ap(unit(a))(cf))
-        case (Blocked(bra, ca)  , Blocked(brf, cf)  ) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ap(ca)(cf))
-        case (Throw(t)          , Blocked(brf,cf)   ) => Blocked(brf, ap(throwF(t))(cf))
-        case (_                 , _throw: Throw     ) => _throw
-      }
-    }
-
     implicit val applicativeInstance = new Applicative[Fetch] {
       override def point[A](a: => A): Fetch[A] = unit(a)
 
-      override def ap[A, B](fa: => Fetch[A])(f: => Fetch[(A) => B]): Fetch[B] = ap(fa)(f)
+      override def ap[A, B](fa: => Fetch[A])(f: => Fetch[(A) => B]): Fetch[B] = fa.ap(f)
     }
 
     def traverse[A, G[_], B](value: G[A])(f: A => Fetch[B])(implicit G: Traverse[G]): Fetch[G[B]] = applicativeInstance.traverse(value)(f)
@@ -81,16 +81,14 @@ trait FetchInstance[Return, Request[+_]] {
       val dc = dca()
       dc.lookup(request) match {
         case None =>
-          println("Not in the cache")
           val box = Atom[FetchStatus[A]](NotFetched)
           dca.update(dc.insert(request,box))
           val br = BlockedRequest( request, box )
           Blocked(Seq(br), cont(box))
         case Some(box) =>
-          println("Cache hit!")
           box() match {
-            case NotFetched           => println("cache slot will be filled"); Blocked(Seq.empty, cont(box))
-            case FetchSuccess(value)  => println("Succesfully retrieved from cache"); Done(value)
+            case NotFetched           => Blocked(Seq.empty, cont(box))
+            case FetchSuccess(value)  => Done(value)
             case FetchFailure(t)      => Throw(t)
           }
       }
