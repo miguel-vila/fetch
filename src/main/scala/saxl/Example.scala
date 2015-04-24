@@ -18,6 +18,8 @@ trait ExampleRequest[+T]
 
 class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
 
+  println("Example")
+
   /**
    * Tipos que representan las posibles respuestas de un servicio
    */
@@ -51,6 +53,8 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
    * a partir de los cuales se realiza la composición para implementar
    * alguna lógica de negocio
    */
+  println("about to execute data fetchs")
+
   val getPostIds = dataFetch(GetPostIds)
 
   def getPostInfo(postId: PostId) = dataFetch(GetPostInfo(postId))
@@ -58,6 +62,8 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
   def getPostContent(postId: PostId) = dataFetch(GetPostContent(postId))
 
   def getPostViews(postId: PostId) = dataFetch(GetPostViews(postId))
+
+  println("data fetchs executed")
 
   /**
    * Representa un documento HTML
@@ -71,15 +77,17 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
   def renderPosts(content: Stream[(PostInfo,PostContent)]): HTML = HTML
   def renderPostList(content: Stream[(PostInfo,PostContent)]): HTML = HTML
   def renderTopics(topicsCount: Map[String, Int]): HTML = HTML
-  def renderLeftPane(sidePane: HTML, topicsPane: HTML): HTML = HTML
+  def renderLeftPane(popularPostsPane: HTML, topicsPane: HTML): HTML = HTML
   def renderPage(leftPane: HTML, mainPane: HTML): HTML = HTML
 
+  println("about to execute composition")
   /**
    * Composición de servicios / Lógica de negocio
    */
   val getAllPostsInfo: Fetch[Stream[PostInfo]] = getPostIds.flatMap { case PostIds(postIds) =>
     Fetch.traverse(postIds)(getPostInfo)
   }
+  println("getAllPostsInfo executed")
 
   val mainPane: Fetch[HTML] = {
     for {
@@ -89,6 +97,7 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
       renderingContent = ordered zip content
     } yield renderPosts(renderingContent)
   }
+  println("mainPane executed")
 
   def getPostDetails(postId: PostId): Fetch[(PostInfo, PostContent)] = {
     ( getPostInfo(postId) |@| getPostContent(postId) ) { (_,_) }
@@ -101,15 +110,35 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
     ordered = (pids zip views).sortBy(_._2.views).map(_._1).take(5)
     content <- Fetch.traverse(ordered)(getPostDetails)
   } yield renderPostList(content)
+  println("popularPosts executed")
+
 
   val topics: Fetch[HTML] = for {
     posts <- getAllPostsInfo
     topicCounts = posts.groupBy(_.postTopic).mapValues(_.size)
   } yield renderTopics(topicCounts)
+  println("topics executed")
 
-  val leftPane: Fetch[HTML] = (popularPosts |@| topics)(renderLeftPane)
+  val leftPane: Fetch[HTML] = {
+    println("executing leftPane")
 
-  val pageHTML: Fetch[HTML] = (leftPane |@| mainPane)(renderPage)
+    //(popularPosts |@| topics)(renderLeftPane)
+    // @TODO: Por alguna razón al utilizar el ApplicativeBuilder de scalaz la computación
+    // se bloquea acá
+    // Se "soluciona" temporalmente llamando explícitamente la función de aplicativo
+    Fetch.ap(popularPosts)(Fetch.ap(topics)(Fetch.unit((renderLeftPane _).curried)))
+  }
+  println("leftPane executed")
+
+  val pageHTML: Fetch[HTML] = {
+
+    //(leftPane |@| mainPane)(renderPage)
+    // Lo mismo que en el comentario de mas arriba
+    Fetch.ap(leftPane)(Fetch.ap(mainPane)(Fetch.unit((renderPage _).curried)))
+  }
+  println("pageHTML executed")
+
+  println("composition executed")
 
   /**
    * Implementaciones de los servicios base
@@ -177,16 +206,15 @@ class Example extends FetchInstance[ExampleReturn,ExampleRequest]  {
 
 }
 
-/*
 object Test extends Example with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
   implicit val cache = Atom(DataCache())
   println("About to run")
+
   runFetch(pageHTML, fetcher).onComplete {
     case Success(html) => println(s"Success!: $html")
     case Failure(t) => println(s"Failure: $t")
   }
 
 }
-*/
