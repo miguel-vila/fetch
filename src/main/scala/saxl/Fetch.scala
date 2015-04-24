@@ -2,6 +2,7 @@ package saxl
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
+import scalaz.{ Applicative , Traverse }
 
 trait FetchInstance[Return, Request[+_]] {
 
@@ -56,6 +57,14 @@ trait FetchInstance[Return, Request[+_]] {
       }
     }
 
+    implicit val applicativeInstance = new Applicative[Fetch] {
+      override def point[A](a: => A): Fetch[A] = unit(a)
+
+      override def ap[A, B](fa: => Fetch[A])(f: => Fetch[(A) => B]): Fetch[B] = ap(fa)(f)
+    }
+
+    def traverse[A, G[_], B](value: G[A])(f: A => Fetch[B])(implicit G: Traverse[G]): Fetch[G[B]] = applicativeInstance.traverse(value)(f)
+
   }
 
   def dataFetch[A<:Return](request: Request[A]): Fetch[A] = {
@@ -73,13 +82,9 @@ trait FetchInstance[Return, Request[+_]] {
           Blocked(Seq(br), cont(box))
         case Some(box) =>
           box() match {
-            case NotFetched =>
-              val br = BlockedRequest( request, box )
-              Blocked(Seq(br), cont(box))
-            case FetchSuccess(value) =>
-              Done(value)
-            case FetchFailure(t) =>
-              Throw(t)
+            case NotFetched           => Blocked(Seq.empty, cont(box))
+            case FetchSuccess(value)  => Done(value)
+            case FetchFailure(t)      => Throw(t)
           }
       }
     }
