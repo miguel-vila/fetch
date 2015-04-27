@@ -5,7 +5,7 @@ import scala.collection.immutable.HashMap
 /**
  * Created by mglvl on 24/04/15.
  */
-case class DataCache[R[_]:Request](private val map: HashMap[Any,Atom[FetchStatus[_]]] = new HashMap[Any,Atom[FetchStatus[_]]]) {
+case class DataCache[R[_]](private val map: HashMap[Any,Atom[FetchStatus[_]]] = new HashMap[Any,Atom[FetchStatus[_]]]) {
 
   def lookup[A](r: R[A]): Option[Atom[FetchStatus[A]]] = map.get(r).map(_.asInstanceOf[Atom[FetchStatus[A]]])
 

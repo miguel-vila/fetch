@@ -32,7 +32,6 @@ class Example extends FetchInstance  {
    * Tipos que representan los requests que atienden los servicios
    */
   trait ExampleRequest[T]
-  implicit object ExampleRequest extends Request[ExampleRequest]
 
   case object GetPostIds extends ExampleRequest[PostIds]
 
@@ -185,7 +184,7 @@ class Example extends FetchInstance  {
 object Test extends Example with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
-  implicit val cache = Atom(DataCache())
+  implicit val cache = Atom(DataCache[ExampleRequest]())
   implicit val stats = Atom(Stats())
 
   println("About to run")

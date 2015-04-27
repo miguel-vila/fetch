@@ -2,9 +2,9 @@ package saxl
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
-import scalaz.{ Applicative , Traverse }
+import scalaz.{Monad, Applicative, Traverse}
 
-case class Fetch[R[_]:Request,+A](result: Atom[DataCache[R]] => Result[R,A]) {
+case class Fetch[R[_],+A](result: Atom[DataCache[R]] => Result[R,A]) {
   import Fetch._
 
   def flatMap[B](f: A => Fetch[R,B]): Fetch[R,B] = Fetch[R,B] { dc =>
@@ -76,23 +76,25 @@ case class Fetch[R[_]:Request,+A](result: Atom[DataCache[R]] => Result[R,A]) {
 
 object Fetch {
 
-  def unit[R[_]:Request,A](a: A): Fetch[R,A] = Fetch[R,A](_ => Done(a))
+  def unit[R[_],A](a: A): Fetch[R,A] = Fetch[R,A](_ => Done(a))
 
-  def throwF[R[_]:Request,A](throwable: Throwable): Fetch[R,A] = Fetch[R,A](_ => Throw(throwable))
+  def throwF[R[_],A](throwable: Throwable): Fetch[R,A] = Fetch[R,A](_ => Throw(throwable))
 
-  implicit def applicativeInstance[R[_]:Request] = new Applicative[Fetch[R,?]] {
+  implicit def fetchInstance[R[_]] = new Monad[Fetch[R,?]] with Applicative[Fetch[R,?]] {
+    override def bind[A,B](fa: Fetch[R,A])(f: A => Fetch[R,B]): Fetch[R,B] = fa.flatMap(f)
+
     override def point[A](a: => A): Fetch[R,A] = unit(a)
 
     override def ap[A, B](fa: => Fetch[R,A])(f: => Fetch[R,(A) => B]): Fetch[R,B] = fa.ap(f)
   }
 
-  def traverse[R[_]:Request,A, G[_], B](value: G[A])(f: A => Fetch[R,B])(implicit G: Traverse[G]): Fetch[R,G[B]] = applicativeInstance.traverse(value)(f)
+  def traverse[R[_],A, G[_], B](value: G[A])(f: A => Fetch[R,B])(implicit G: Traverse[G]): Fetch[R,G[B]] = fetchInstance.traverse(value)(f)
 
 }
 
 trait FetchInstance {
 
-  def dataFetch[R[_]:Request,A](request: R[A]): Fetch[R,A] = {
+  def dataFetch[R[_],A](request: R[A]): Fetch[R,A] = {
     def cont(box: Atom[FetchStatus[A]]) = Fetch[R,A] { _ =>
       val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [runFetch]
       Done(a)
@@ -121,7 +123,7 @@ trait FetchInstance {
    *
    * Puede ser utilizada por implementaciones
    */
-  def processBlockedRequest[R[_]:Request,A](br: BlockedRequest[R,A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def processBlockedRequest[R[_],A](br: BlockedRequest[R,A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
     futureImpl map { a =>
       br.fetchStatus.update(FetchSuccess(a))
     } recover { case t: Throwable =>
