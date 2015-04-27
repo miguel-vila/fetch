@@ -33,16 +33,17 @@ case class Fetch[R[_]:Request,+A](result: Atom[DataCache[R]] => Result[R,A]) {
 
   // Por alguna razón poner este método en el companion object (recibiendo un objeto de tipo [Fetch]) no compila.
   // Es mejor tener esto por fuera para desalentar su uso con cada Fetch creado sino solamente con el Fetch final.
-  def run(implicit
+  def run(dataSource: R[_] => DataSource[R])(implicit
           executionContext: ExecutionContext,
-          dataCache: Atom[DataCache[R]],
-          dataSource: DataSource[R]): Future[A] = {
+          dataCache: Atom[DataCache[R]]): Future[A] = {
     result(dataCache) match {
       case Done(a)          => Future.successful(a)
       case Throw(t)         => Future.failed(t)
-      case Blocked(br,cont) =>
-        dataSource.fetch(br).flatMap { _ =>
-          cont.run
+      case Blocked(brs,cont) =>
+        val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
+        val futuresByDataSource = groupedByDataSource.map{ case (ds,brs) => ds.fetch(brs) } //@TODO es posible que esto lo haga el compileador? saber qué datasource llamar según el tipo del request?
+        Future.sequence(futuresByDataSource).flatMap { _ =>
+          cont.run(dataSource)
         }
     }
   }

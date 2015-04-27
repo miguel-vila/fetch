@@ -187,10 +187,12 @@ object Test extends Example with App {
   implicit val cache = Atom(DataCache())
   println("About to run")
 
+  // En este ejemplo solo hay un datasource -> todos los requests son atendidos por él
+  def dataSource(request: ExampleRequest[_]): DataSource[ExampleRequest] = ExampleDataSource
   /**
    * Ejecucion
    */
-  pageHTML.run.onComplete {
+  pageHTML.run(dataSource).onComplete {
     case Success(html) =>
       println(s"Success!: $html")
       println(cache)
