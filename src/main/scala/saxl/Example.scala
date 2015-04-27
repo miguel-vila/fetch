@@ -173,6 +173,7 @@ class Example extends FetchInstance  {
    * servicio se ejecuta independientemente de los otros.
    */
   implicit object ExampleDataSource extends DataSource[ExampleRequest] {
+    def name = "ExampleDataSource"
     def fetch(blockedRequests: Seq[BlockedExampleRequest[_]])(implicit executionContext: ExecutionContext): Future[Unit] = {
       for {
         _ <- Future.traverse(blockedRequests)(processRequest)
@@ -185,6 +186,8 @@ object Test extends Example with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
   implicit val cache = Atom(DataCache())
+  implicit val stats = Atom(Stats())
+
   println("About to run")
 
   // En este ejemplo solo hay un datasource -> todos los requests son atendidos por él
@@ -195,7 +198,10 @@ object Test extends Example with App {
   pageHTML.run(dataSource).onComplete {
     case Success(html) =>
       println(s"Success!: $html")
-      println(cache)
+      println("Caché:")
+      println(cache())
+      println("Stats:")
+      println(stats())
     case Failure(t) => println(s"Failure: $t")
   }
 

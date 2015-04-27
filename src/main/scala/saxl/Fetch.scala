@@ -1,5 +1,6 @@
 package saxl
 
+import scala.collection.immutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scalaz.{ Applicative , Traverse }
 
@@ -35,14 +36,37 @@ case class Fetch[R[_]:Request,+A](result: Atom[DataCache[R]] => Result[R,A]) {
   // Es mejor tener esto por fuera para desalentar su uso con cada Fetch creado sino solamente con el Fetch final.
   def run(dataSource: R[_] => DataSource[R])(implicit
           executionContext: ExecutionContext,
-          dataCache: Atom[DataCache[R]]): Future[A] = {
+          dataCache: Atom[DataCache[R]],
+          statsAtom: Atom[Stats]): Future[A] = {
     result(dataCache) match {
       case Done(a)          => Future.successful(a)
       case Throw(t)         => Future.failed(t)
       case Blocked(brs,cont) =>
         val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
-        val futuresByDataSource = groupedByDataSource.map{ case (ds,brs) => ds.fetch(brs) } //@TODO es posible que esto lo haga el compileador? saber qué datasource llamar según el tipo del request?
-        Future.sequence(futuresByDataSource).flatMap { _ =>
+        val t0 = System.currentTimeMillis()
+        //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
+        val dataSourceFutures = groupedByDataSource.map{ case (ds,brs) =>
+          val dsT0 = System.currentTimeMillis()
+          ds.fetch(brs).map { _ =>
+            val dsTf = (System.currentTimeMillis() - dsT0).toInt
+            val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length , dataSourceTimeMillis = dsTf)
+            (ds.name, dsStats)
+          }
+        } //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
+
+        val sequence = Future.sequence(dataSourceFutures)
+        val roundFuture = sequence.map(_ => () )
+
+        for {
+          _ <- roundFuture
+          roundTime = (System.currentTimeMillis() - t0).toInt
+          namesAndStats <- sequence
+          hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()){ case (hm,(dsName,dsStats)) => hm.updated(dsName,dsStats) }
+          roundStats = RoundStats(roundTime, hm)
+          stats = statsAtom()
+        } yield statsAtom.update(stats.copy(stats = roundStats :: stats.stats))
+
+        roundFuture.flatMap { _ =>
           cont.run(dataSource)
         }
     }
