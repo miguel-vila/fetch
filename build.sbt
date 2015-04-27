@@ -24,3 +24,8 @@ scalacOptions ++= Seq(
   //"-Ywarn-value-discard",
   "-Xfuture"
 )
+
+resolvers += "bintray/non" at "http://dl.bintray.com/non/maven"
+
+// for scala 2.11
+addCompilerPlugin("org.spire-math" % "kind-projector_2.11" % "0.5.2")

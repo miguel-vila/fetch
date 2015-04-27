@@ -3,30 +3,47 @@ package saxl
 import scala.concurrent.{ExecutionContext, Future}
 import scalaz.{ Applicative , Traverse }
 
-case class Fetch[A](result: Atom[DataCache] => Result[A]) {
+case class Fetch[R[_]:Request,+A](result: Atom[DataCache[R]] => Result[R,A]) {
   import Fetch._
 
-  def flatMap[B](f: A => Fetch[B]): Fetch[B] = Fetch { dc =>
-    result(dc) match {
+  def flatMap[B](f: A => Fetch[R,B]): Fetch[R,B] = Fetch[R,B] { dc =>
+    val x = result(dc)
+    x match {
       case Done(a)            => f(a).result(dc)
-      case Blocked(br, cont)  => Blocked(br, cont flatMap f)
+      case Blocked(br, cont)  => Blocked[R,B](br, cont flatMap f)
       case _throw : Throw     => _throw
     }
   }
 
-  def map[B](f: A => B): Fetch[B] = flatMap { f andThen unit }
+  def map[B](f: A => B): Fetch[R,B] = flatMap { f andThen unit[R,B] }
 
-  def ap[B](ff: => Fetch[A => B]): Fetch[B] = Fetch { dc =>
+  def ap[B](ff: => Fetch[R,A => B]): Fetch[R,B] = Fetch[R,B] { dc =>
     val ra = result(dc)
     val rf = ff.result(dc)
     (ra, rf) match {
       case (Done(a)           , Done(f)           ) => Done(f(a))
-      case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ca.ap(unit[A => B](f)))
+      case (Blocked(br, ca)   , Done(f)           ) => Blocked(br, ca.ap(unit[R,A => B](f)))
       case (_throw:Throw      , Done(f)           ) => _throw
-      case (Done(a)           , Blocked(br, cf)   ) => Blocked(br, unit(a).ap(cf))
+      case (Done(a)           , Blocked(br, cf)   ) => Blocked[R,B](br, unit[R,A](a).ap(cf))
       case (Blocked(bra, ca)  , Blocked(brf, cf)  ) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ca.ap(cf))
-      case (Throw(t)          , Blocked(brf,cf)   ) => Blocked(brf, throwF(t).ap(cf))
+      case (Throw(t)          , Blocked(brf,cf)   ) => Blocked(brf, throwF[R,A](t).ap(cf))
       case (_                 , _throw: Throw     ) => _throw
+    }
+  }
+
+  // Por alguna razón poner este método en el companion object (recibiendo un objeto de tipo [Fetch]) no compila.
+  // Es mejor tener esto por fuera para desalentar su uso con cada Fetch creado sino solamente con el Fetch final.
+  def run(implicit
+          executionContext: ExecutionContext,
+          dataCache: Atom[DataCache[R]],
+          dataSource: DataSource[R]): Future[A] = {
+    result(dataCache) match {
+      case Done(a)          => Future.successful(a)
+      case Throw(t)         => Future.failed(t)
+      case Blocked(br,cont) =>
+        dataSource.fetch(br).flatMap { _ =>
+          cont.run
+        }
     }
   }
 
@@ -34,28 +51,28 @@ case class Fetch[A](result: Atom[DataCache] => Result[A]) {
 
 object Fetch {
 
-  def unit[A](a: A): Fetch[A] = Fetch[A](_ => Done(a))
+  def unit[R[_]:Request,A](a: A): Fetch[R,A] = Fetch[R,A](_ => Done(a))
 
-  def throwF[A](throwable: Throwable): Fetch[A] = Fetch(_ => Throw(throwable))
+  def throwF[R[_]:Request,A](throwable: Throwable): Fetch[R,A] = Fetch[R,A](_ => Throw(throwable))
 
-  implicit val applicativeInstance = new Applicative[Fetch] {
-    override def point[A](a: => A): Fetch[A] = unit(a)
+  implicit def applicativeInstance[R[_]:Request] = new Applicative[Fetch[R,?]] {
+    override def point[A](a: => A): Fetch[R,A] = unit(a)
 
-    override def ap[A, B](fa: => Fetch[A])(f: => Fetch[(A) => B]): Fetch[B] = fa.ap(f)
+    override def ap[A, B](fa: => Fetch[R,A])(f: => Fetch[R,(A) => B]): Fetch[R,B] = fa.ap(f)
   }
 
-  def traverse[A, G[_], B](value: G[A])(f: A => Fetch[B])(implicit G: Traverse[G]): Fetch[G[B]] = applicativeInstance.traverse(value)(f)
+  def traverse[R[_]:Request,A, G[_], B](value: G[A])(f: A => Fetch[R,B])(implicit G: Traverse[G]): Fetch[R,G[B]] = applicativeInstance.traverse(value)(f)
 
 }
 
 trait FetchInstance {
 
-  def dataFetch[A](request: Request[A]): Fetch[A] = {
-    def cont(box: Atom[FetchStatus[A]]) = Fetch { _ =>
+  def dataFetch[R[_]:Request,A](request: R[A]): Fetch[R,A] = {
+    def cont(box: Atom[FetchStatus[A]]) = Fetch[R,A] { _ =>
       val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [runFetch]
       Done(a)
     }
-    Fetch { dca =>
+    Fetch[R,A] { dca =>
       val dc = dca()
       dc.lookup(request) match {
         case None =>
@@ -79,24 +96,11 @@ trait FetchInstance {
    *
    * Puede ser utilizada por implementaciones
    */
-  def processBlockedRequest[A](br: BlockedRequest[A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def processBlockedRequest[R[_]:Request,A](br: BlockedRequest[R,A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
     futureImpl map { a =>
       br.fetchStatus.update(FetchSuccess(a))
     } recover { case t: Throwable =>
       br.fetchStatus.update(FetchFailure(t))
-    }
-  }
-
-  type Fetcher = Seq[BlockedRequest[_]] => Future[Unit]
-
-  def runFetch[A](fetch: Fetch[A], fetcher: Fetcher)(implicit executionContext: ExecutionContext, dataCache: Atom[DataCache]): Future[A] = {
-    fetch.result(dataCache) match {
-      case Done(a)          => Future.successful(a)
-      case Throw(t)         => Future.failed(t)
-      case Blocked(br,cont) =>
-        fetcher(br).flatMap { _ =>
-          runFetch(cont,fetcher)
-        }
     }
   }
 
