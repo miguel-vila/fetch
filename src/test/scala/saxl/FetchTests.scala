@@ -6,10 +6,19 @@ import scalaz.Equal
 import scalaz.scalacheck.ScalazProperties.monad
 import saxl.Fetch.fetchInstance
 
+import scalaz.scalacheck.ScalazProperties.monad
+
 /**
  * Created by seven4n on 27/04/15.
  */
 class FetchTests extends Properties("") {
+
+  implicit def Function1IntInt[A](implicit A: Arbitrary[Int]): Arbitrary[Int => Int] =
+    Arbitrary(Gen.frequency[Int => Int](
+      (1, Gen.const((x: Int) => x)),
+      (1, Gen.const((x: Int) => x + 1)),
+      (3, A.arbitrary.map(a => (_: Int) => a))
+    ))
 
   def checkAll(name: String, props: Properties) = {
     for ((name2, prop) <- props.properties) yield {
@@ -18,7 +27,7 @@ class FetchTests extends Properties("") {
   }
 
   import Fetch.fetchInstance
-  trait TestRequest[T]
+  case class TestRequest[T](t: T)
 
   val exceptionGen: Gen[Exception] = Gen.const(new Exception("Some exception"))
 
@@ -86,6 +95,7 @@ class FetchTests extends Properties("") {
 
     implicit val fetchEqual: Equal[Fetch[R,A]] = new Equal[Fetch[R, A]] {
       override def equal(a1: Fetch[R, A], a2: Fetch[R, A]): Boolean = {
+        println(s"comparing $a1 and $a2")
         val samples = List.fill(100)(dataCacheGen.sample).collect {
           case Some(dc) => Atom(dc)
           case None => sys.error(s"Could not generate a sample datacache")
@@ -97,12 +107,24 @@ class FetchTests extends Properties("") {
   }
 
 
+  val arbInt = Arbitrary.arbInt
+  val genInt = arbInt.arbitrary
+  val genFInt = new SaxlGens[TestRequest,Int](genInt, genInt.map(n => TestRequest(n)))
+  implicit val arbFetch =  Arbitrary( genFInt.fetch )
+
+  val arbIntToInt = Function1IntInt(arbInt)
+  val genIntToInt = arbIntToInt.arbitrary
+  val genFIntToInt = new SaxlGens[TestRequest,Int => Int](genIntToInt, genIntToInt.map(f => TestRequest(f)))
+  implicit val arbFFetch = Arbitrary( genFIntToInt.fetch )
+
+  implicit val intEq = new Equal[Int] {
+    override def equal(a1: Int, a2: Int): Boolean = a1 == a2
+  }
+
+  val intSaxlEqual = new SaxlEqual[TestRequest,Int](intEq)
+  implicit val fetchEq = intSaxlEqual.fetchEqual
 
 
-//  implicit def fetchArbitrary[R[_], A:Arbitrary]: Arbitrary[Fetch[R,A]] = ???
-
-//  implicit def testFetchEqual[A: Gen] = fetchEqual[]
-
-//  checkAll("",monad.laws[Fetch[TestRequest,?]])
+//  checkAll("monad laws",monad.laws[Fetch[TestRequest,?]])
 
 }
