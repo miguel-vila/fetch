@@ -72,6 +72,15 @@ case class Fetch[R[_],+A](result: Atom[DataCache[R]] => Result[R,A]) {
     }
   }
 
+  def catchF[B>:A](handle: Throwable => Fetch[R,B]): Fetch[R,B] = Fetch[R,B] { dc =>
+    val r = result(dc)
+    r match {
+      case Throw(e)         => handle(e).result(dc)
+      case Blocked(br,cont) => cont.catchF(handle).result(dc)
+      case _                => r
+    }
+  }
+
 }
 
 object Fetch {
