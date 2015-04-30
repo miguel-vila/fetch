@@ -1,5 +1,7 @@
 # haxl poc
 
+[![Build Status](https://travis-ci.org/miguel-vila/haxl-poc.svg?branch=master)](https://travis-ci.org/miguel-vila/haxl-poc)
+
 Una prueba de concepto para implementar [haxl](http://community.haskell.org/~simonmar/papers/haxl-icfp14.pdf) en Scala, tal vez ingenuamente. Usa la librería estándar de Futuros para la ejecución y scalaz para ayuda sintáctica de aplicativos.
 
 Un ejemplo de su potencial uso, tomado del artículo, se encuentra [acá](https://github.com/miguel-vila/haxl-poc/blob/37771fe7f3fdcd46d50d55aaf4376ac4eaf38f23/src/main/scala/saxl/Example.scala#L78).
