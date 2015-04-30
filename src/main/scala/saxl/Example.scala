@@ -9,13 +9,7 @@ import scalaz.std.stream.streamInstance
 /**
  * Created by mglvl on 23/04/15.
  */
-
-/**
- * Tipos bases
- */
 class Example extends FetchInstance  {
-
-  println("Example")
 
   /**
    * Tipos que representan las posibles respuestas de un servicio
@@ -37,13 +31,15 @@ class Example extends FetchInstance  {
   /**
    * Tipos que representan los requests que atienden los servicios
    */
-  case object GetPostIds extends Request[PostIds]
+  trait ExampleRequest[T]
 
-  case class GetPostInfo(postId: PostId) extends Request[PostInfo]
+  case object GetPostIds extends ExampleRequest[PostIds]
 
-  case class GetPostContent(postId: PostId) extends Request[PostContent]
+  case class GetPostInfo(postId: PostId) extends ExampleRequest[PostInfo]
 
-  case class GetPostViews(postId: PostId) extends Request[PostViews]
+  case class GetPostContent(postId: PostId) extends ExampleRequest[PostContent]
+
+  case class GetPostViews(postId: PostId) extends ExampleRequest[PostViews]
 
   /**
    * Valores/Funciones Fetch que representan los queries básicos
@@ -75,13 +71,18 @@ class Example extends FetchInstance  {
   def renderPage(leftPane: HTML, mainPane: HTML): HTML = HTML
 
   /**
+   * Tipo auxiliar para simplificar firmas
+   */
+  type ExampleFetch[A] = Fetch[ExampleRequest,A]
+
+  /**
    * Composición de servicios / Lógica de negocio
    */
-  val getAllPostsInfo: Fetch[Stream[PostInfo]] = getPostIds.flatMap { postIds =>
+  val getAllPostsInfo: ExampleFetch[Stream[PostInfo]] = getPostIds.flatMap { postIds =>
     Fetch.traverse(postIds)(getPostInfo)
   }
 
-  val mainPane: Fetch[HTML] = {
+  val mainPane: ExampleFetch[HTML] = {
     for {
       posts <- getAllPostsInfo
       ordered = posts.sortBy(_.postDate).take(5)
@@ -90,11 +91,11 @@ class Example extends FetchInstance  {
     } yield renderPosts(renderingContent)
   }
 
-  def getPostDetails(postId: PostId): Fetch[(PostInfo, PostContent)] = {
+  def getPostDetails(postId: PostId): ExampleFetch[(PostInfo, PostContent)] = {
     ( getPostInfo(postId) |@| getPostContent(postId) ) { (_,_) }
   }
 
-  val popularPosts: Fetch[HTML] = for {
+  val popularPosts: ExampleFetch[HTML] = for {
     postIds <- getPostIds
     views <- Fetch.traverse(postIds)(getPostViews)
     ordered = (postIds zip views).sortBy(_._2).map(_._1).take(5)
@@ -102,14 +103,14 @@ class Example extends FetchInstance  {
   } yield renderPostList(content)
 
 
-  val topics: Fetch[HTML] = for {
+  val topics: ExampleFetch[HTML] = for {
     posts <- getAllPostsInfo
     topicCounts = posts.groupBy(_.postTopic).mapValues(_.size)
   } yield renderTopics(topicCounts)
 
-  val leftPane: Fetch[HTML] = (popularPosts |@| topics)(renderLeftPane)
+  val leftPane: ExampleFetch[HTML] = (popularPosts |@| topics)(renderLeftPane)
 
-  val pageHTML: Fetch[HTML] = (leftPane |@| mainPane)(renderPage)
+  val pageHTML: ExampleFetch[HTML] = (leftPane |@| mainPane)(renderPage)
 
   /**
    * Implementaciones de los servicios base
@@ -150,10 +151,12 @@ class Example extends FetchInstance  {
     Future.successful(postViewsData(postId))
   }
 
+  type BlockedExampleRequest[A] = BlockedRequest[ExampleRequest,A]
+
   /**
    * Función que ejecuta un query y realiza el side effect correspondiente
    */
-  def processRequest(br: BlockedRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def processRequest(br: BlockedExampleRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
     br match {
       case bra @ BlockedRequest(GetPostIds,_)             => processBlockedRequest( bra, getPostIdsImpl() )
       case bra @ BlockedRequest(GetPostInfo(postId),_)    => processBlockedRequest( bra, getPostInfoImpl(postId) )
@@ -163,33 +166,41 @@ class Example extends FetchInstance  {
   }
 
   /**
-   * Fetcher que utiliza la anterior funcion para ejecutar de forma independiente
+   * Datasource que utiliza la anterior funcion para ejecutar de forma independiente
    * cada servicio. Es posible que dados multiples servicios uno quiera agrupar
    * requests a la misma fuente de datos. En este ejemplo no se hace eso, cada
-   * servicio se ejecuta independientemente de los otros. Dado que las funciones
-   * de tipo [[Fetcher]] reciben multiples [[BlockedRequest]] esto se podria implementar.
+   * servicio se ejecuta independientemente de los otros.
    */
-  def fetcher(br: Seq[BlockedRequest[_]])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    for {
-      _ <- Future.traverse(br)(processRequest)
-    } yield ()
+  implicit object ExampleDataSource extends DataSource[ExampleRequest] {
+    def name = "ExampleDataSource"
+    def fetch(blockedRequests: Seq[BlockedExampleRequest[_]])(implicit executionContext: ExecutionContext): Future[Unit] = {
+      for {
+        _ <- Future.traverse(blockedRequests)(processRequest)
+      } yield ()
+    }
   }
-
 }
 
 object Test extends Example with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
-  implicit val cache = Atom(DataCache())
+  implicit val cache = Atom(DataCache[ExampleRequest]())
+  implicit val stats = Atom(Stats())
+
   println("About to run")
 
+  // En este ejemplo solo hay un datasource -> todos los requests son atendidos por él
+  def dataSource(request: ExampleRequest[_]): DataSource[ExampleRequest] = ExampleDataSource
   /**
    * Ejecucion
    */
-  runFetch(pageHTML, fetcher).onComplete {
+  pageHTML.run(dataSource).onComplete {
     case Success(html) =>
       println(s"Success!: $html")
-      println(cache)
+      println("Caché:")
+      println(cache())
+      println("Stats:")
+      println(stats())
     case Failure(t) => println(s"Failure: $t")
   }
 
