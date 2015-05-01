@@ -1,15 +1,15 @@
 package saxl
 
 import java.util.Date
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
+import scala.concurrent.{ ExecutionContext, Future }
+import scala.util.{ Failure, Success }
 import scalaz.syntax.applicative._
 import scalaz.std.stream.streamInstance
 
 /**
  * Created by mglvl on 23/04/15.
  */
-class Example extends FetchInstance  {
+class Example extends FetchInstance {
 
   /**
    * Tipos que representan las posibles respuestas de un servicio
@@ -22,9 +22,9 @@ class Example extends FetchInstance  {
   object PostContent extends PostContent
 
   case class PostInfo(
-                       postId: PostId,
-                       postDate: PostDate,
-                       postTopic: String)
+    postId: PostId,
+    postDate: PostDate,
+    postTopic: String)
 
   type PostIds = Stream[PostId]
 
@@ -64,8 +64,8 @@ class Example extends FetchInstance  {
   /**
    * Funciones de "Renderización"
    */
-  def renderPosts(content: Stream[(PostInfo,PostContent)]): HTML = HTML
-  def renderPostList(content: Stream[(PostInfo,PostContent)]): HTML = HTML
+  def renderPosts(content: Stream[(PostInfo, PostContent)]): HTML = HTML
+  def renderPostList(content: Stream[(PostInfo, PostContent)]): HTML = HTML
   def renderTopics(topicsCount: Map[String, Int]): HTML = HTML
   def renderLeftPane(popularPostsPane: HTML, topicsPane: HTML): HTML = HTML
   def renderPage(leftPane: HTML, mainPane: HTML): HTML = HTML
@@ -73,7 +73,7 @@ class Example extends FetchInstance  {
   /**
    * Tipo auxiliar para simplificar firmas
    */
-  type ExampleFetch[A] = Fetch[ExampleRequest,A]
+  type ExampleFetch[A] = Fetch[ExampleRequest, A]
 
   /**
    * Composición de servicios / Lógica de negocio
@@ -92,7 +92,7 @@ class Example extends FetchInstance  {
   }
 
   def getPostDetails(postId: PostId): ExampleFetch[(PostInfo, PostContent)] = {
-    ( getPostInfo(postId) |@| getPostContent(postId) ) { (_,_) }
+    (getPostInfo(postId) |@| getPostContent(postId)) { (_, _) }
   }
 
   val popularPosts: ExampleFetch[HTML] = for {
@@ -101,7 +101,6 @@ class Example extends FetchInstance  {
     ordered = (postIds zip views).sortBy(_._2).map(_._1).take(5)
     content <- Fetch.traverse(ordered)(getPostDetails)
   } yield renderPostList(content)
-
 
   val topics: ExampleFetch[HTML] = for {
     posts <- getAllPostsInfo
@@ -116,17 +115,17 @@ class Example extends FetchInstance  {
    * Implementaciones de los servicios base
    */
   def getPostIdsImpl(): Future[PostIds] = {
-    Future.successful(Stream(1,2,3,4,5,6,7))
+    Future.successful(Stream(1, 2, 3, 4, 5, 6, 7))
   }
 
   val postInfoData = Map(
-    1 -> PostInfo(1,new Date(),"topic post 1"),
-    2 -> PostInfo(2,new Date(),"topic post 2"),
-    3 -> PostInfo(3,new Date(),"topic post 3"),
-    4 -> PostInfo(4,new Date(),"topic post 4"),
-    5 -> PostInfo(5,new Date(),"topic post 5"),
-    6 -> PostInfo(6,new Date(),"topic post 6"),
-    7 -> PostInfo(7,new Date(),"topic post 7")
+    1 -> PostInfo(1, new Date(), "topic post 1"),
+    2 -> PostInfo(2, new Date(), "topic post 2"),
+    3 -> PostInfo(3, new Date(), "topic post 3"),
+    4 -> PostInfo(4, new Date(), "topic post 4"),
+    5 -> PostInfo(5, new Date(), "topic post 5"),
+    6 -> PostInfo(6, new Date(), "topic post 6"),
+    7 -> PostInfo(7, new Date(), "topic post 7")
   )
 
   def getPostInfoImpl(postId: PostId): Future[PostInfo] = {
@@ -151,17 +150,17 @@ class Example extends FetchInstance  {
     Future.successful(postViewsData(postId))
   }
 
-  type BlockedExampleRequest[A] = BlockedRequest[ExampleRequest,A]
+  type BlockedExampleRequest[A] = BlockedRequest[ExampleRequest, A]
 
   /**
    * Función que ejecuta un query y realiza el side effect correspondiente
    */
   def processRequest(br: BlockedExampleRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
     br match {
-      case bra @ BlockedRequest(GetPostIds,_)             => processBlockedRequest( bra, getPostIdsImpl() )
-      case bra @ BlockedRequest(GetPostInfo(postId),_)    => processBlockedRequest( bra, getPostInfoImpl(postId) )
-      case bra @ BlockedRequest(GetPostContent(postId),_) => processBlockedRequest( bra, getPostContentImpl(postId) )
-      case bra @ BlockedRequest(GetPostViews(postId),_)   => processBlockedRequest( bra, getPostViewsImpl(postId) )
+      case bra @ BlockedRequest(GetPostIds, _) => processBlockedRequest(bra, getPostIdsImpl())
+      case bra @ BlockedRequest(GetPostInfo(postId), _) => processBlockedRequest(bra, getPostInfoImpl(postId))
+      case bra @ BlockedRequest(GetPostContent(postId), _) => processBlockedRequest(bra, getPostContentImpl(postId))
+      case bra @ BlockedRequest(GetPostViews(postId), _) => processBlockedRequest(bra, getPostViewsImpl(postId))
     }
   }
 

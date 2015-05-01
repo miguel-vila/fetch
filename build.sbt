@@ -4,6 +4,8 @@ version := "0.0"
 
 scalaVersion := "2.11.6"
 
+addCompilerPlugin("org.spire-math" % "kind-projector_2.11" % "0.5.2")
+
 libraryDependencies ++= Seq(
   "org.scalaz"      %%  "scalaz-core"               % "7.1.1",
   "org.scalatest"   %   "scalatest_2.11"            % "2.2.1"   % "test",
@@ -30,5 +32,4 @@ scalacOptions ++= Seq(
 
 resolvers += "bintray/non" at "http://dl.bintray.com/non/maven"
 
-// for scala 2.11
-addCompilerPlugin("org.spire-math" % "kind-projector_2.11" % "0.5.2")
+scalariformSettings

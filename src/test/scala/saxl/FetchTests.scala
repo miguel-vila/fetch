@@ -8,6 +8,6 @@ import scalaz.scalacheck.ScalazProperties.monad
  */
 class FetchTests extends FetchProperties {
 
-  checkAll("monad laws", monad.laws[Fetch[TestRequest,?]])
+  checkAll("monad laws", monad.laws[Fetch[TestRequest, ?]])
 
 }

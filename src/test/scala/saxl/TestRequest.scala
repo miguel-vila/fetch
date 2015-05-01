@@ -1,6 +1,6 @@
 package saxl
 
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.{ Arbitrary, Gen }
 import scalaz.Equal
 
 /**
@@ -17,19 +17,19 @@ object TestRequest {
       (3, A.arbitrary.map(a => (_: Int) => a))
     ))
 
-  val genInt = Gen.oneOf(1,2,3)
-  val genFInt = new SaxlGens[TestRequest,Int](genInt, genInt.map(n => TestRequest(n)))
-  implicit val arbFetch =  Arbitrary( genFInt.fetch )
+  val genInt = Gen.oneOf(1, 2, 3)
+  val genFInt = new SaxlGens[TestRequest, Int](genInt, genInt.map(n => TestRequest(n)))
+  implicit val arbFetch = Arbitrary(genFInt.fetch)
 
   val arbIntToInt = Function1IntInt(Arbitrary(genInt))
   val genIntToInt = arbIntToInt.arbitrary
-  val genFIntToInt = new SaxlGens[TestRequest,Int => Int](genIntToInt, genIntToInt.map(f => TestRequest(f)))
-  implicit val arbFFetch = Arbitrary( genFIntToInt.fetch )
+  val genFIntToInt = new SaxlGens[TestRequest, Int => Int](genIntToInt, genIntToInt.map(f => TestRequest(f)))
+  implicit val arbFFetch = Arbitrary(genFIntToInt.fetch)
 
   implicit val intEq = new Equal[Int] {
     override def equal(a1: Int, a2: Int): Boolean = a1 == a2
   }
 
-  val intSaxlEqual = new SaxlEqual[TestRequest,Int](intEq)
+  val intSaxlEqual = new SaxlEqual[TestRequest, Int](intEq)
   implicit val fetchEq = intSaxlEqual.fetchEqual
 }

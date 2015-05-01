@@ -11,12 +11,11 @@ case class Stats(stats: List[RoundStats]) extends AnyVal {
     var i = 1
     stats.reverse.map { rs =>
       val s = s"Round $i:\n$rs"
-      i+=1
+      i += 1
       s
     }.mkString("\n")
   }
 }
-
 
 object Stats {
   def apply(): Stats = Stats(List.empty)
@@ -25,7 +24,7 @@ object Stats {
 case class RoundStats(roundTimeMillis: Int, roundDataSources: HashMap[String, DataSourceRoundStats]) {
   override def toString(): String = {
     val rt = s"roundTime: $roundTimeMillis millis\n"
-    val rds = roundDataSources.map{ case (name,dsrs) => s"DataSource '$name':\n$dsrs" }.mkString("\n")
+    val rds = roundDataSources.map { case (name, dsrs) => s"DataSource '$name':\n$dsrs" }.mkString("\n")
     rt + rds
   }
 }
