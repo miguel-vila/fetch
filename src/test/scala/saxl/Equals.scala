@@ -29,10 +29,10 @@ class SaxlEqual[R[_], A](A: Equal[A]) {
   implicit def resultEqual: Equal[Result[R, A]] = new Equal[Result[R, A]] {
     override def equal(a1: Result[R, A], a2: Result[R, A]): Boolean = {
       (a1, a2) match {
-        case (d1: Done[R, A], d2: Done[R, A]) => d1 === d2
+        case (d1: Done[R, A], d2: Done[R, A])       => d1 === d2
         case (b1: Blocked[R, A], b2: Blocked[R, A]) => b1 === b2
-        case (t1: Throw, t2: Throw) => t1 === t2
-        case _ => false
+        case (t1: Throw, t2: Throw)                 => t1 === t2
+        case _                                      => false
       }
     }
   }
@@ -41,7 +41,7 @@ class SaxlEqual[R[_], A](A: Equal[A]) {
     override def equal(a1: Fetch[R, A], a2: Fetch[R, A]): Boolean = {
       val sampleDC = dataCacheGen.sample match {
         case Some(dc) => Atom(dc)
-        case None => sys.error(s"Could not generate a sample datacache")
+        case None     => sys.error(s"Could not generate a sample datacache")
       }
       a1.result(sampleDC) === a2.result(sampleDC)
     }

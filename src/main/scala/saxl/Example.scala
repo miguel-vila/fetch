@@ -125,8 +125,7 @@ class Example extends FetchInstance {
     4 -> PostInfo(4, new Date(), "topic post 4"),
     5 -> PostInfo(5, new Date(), "topic post 5"),
     6 -> PostInfo(6, new Date(), "topic post 6"),
-    7 -> PostInfo(7, new Date(), "topic post 7")
-  )
+    7 -> PostInfo(7, new Date(), "topic post 7"))
 
   def getPostInfoImpl(postId: PostId): Future[PostInfo] = {
     Future.successful(postInfoData(postId))
@@ -143,8 +142,7 @@ class Example extends FetchInstance {
     4 -> 40,
     5 -> 50,
     6 -> 60,
-    7 -> 70
-  )
+    7 -> 70)
 
   def getPostViewsImpl(postId: PostId): Future[PostViews] = {
     Future.successful(postViewsData(postId))
@@ -157,10 +155,10 @@ class Example extends FetchInstance {
    */
   def processRequest(br: BlockedExampleRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
     br match {
-      case bra @ BlockedRequest(GetPostIds, _) => processBlockedRequest(bra, getPostIdsImpl())
-      case bra @ BlockedRequest(GetPostInfo(postId), _) => processBlockedRequest(bra, getPostInfoImpl(postId))
+      case bra @ BlockedRequest(GetPostIds, _)             => processBlockedRequest(bra, getPostIdsImpl())
+      case bra @ BlockedRequest(GetPostInfo(postId), _)    => processBlockedRequest(bra, getPostInfoImpl(postId))
       case bra @ BlockedRequest(GetPostContent(postId), _) => processBlockedRequest(bra, getPostContentImpl(postId))
-      case bra @ BlockedRequest(GetPostViews(postId), _) => processBlockedRequest(bra, getPostViewsImpl(postId))
+      case bra @ BlockedRequest(GetPostViews(postId), _)   => processBlockedRequest(bra, getPostViewsImpl(postId))
     }
   }
 

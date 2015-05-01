@@ -33,3 +33,9 @@ scalacOptions ++= Seq(
 resolvers += "bintray/non" at "http://dl.bintray.com/non/maven"
 
 scalariformSettings
+
+import scalariform.formatter.preferences._
+
+ScalariformKeys.preferences := ScalariformKeys.preferences.value
+  .setPreference(AlignSingleLineCaseStatements, true)
+  .setPreference(AlignParameters, true)

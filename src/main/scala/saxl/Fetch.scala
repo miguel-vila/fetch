@@ -10,9 +10,9 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   def flatMap[B](f: A => Fetch[R, B]): Fetch[R, B] = Fetch[R, B] { dc =>
     val x = result(dc)
     x match {
-      case Done(a) => f(a).result(dc)
+      case Done(a)           => f(a).result(dc)
       case Blocked(br, cont) => Blocked[R, B](br, cont flatMap f)
-      case _throw: Throw => _throw
+      case _throw: Throw     => _throw
     }
   }
 
@@ -22,23 +22,23 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
     val ra = result(dc)
     val rf = ff.result(dc)
     (ra, rf) match {
-      case (Done(a), Done(f)) => Done(f(a))
-      case (Blocked(br, ca), Done(f)) => Blocked(br, ca.ap(unit[R, A => B](f)))
-      case (_throw: Throw, Done(f)) => _throw
-      case (Done(a), Blocked(br, cf)) => Blocked[R, B](br, unit[R, A](a).ap(cf))
+      case (Done(a), Done(f))                   => Done(f(a))
+      case (Blocked(br, ca), Done(f))           => Blocked(br, ca.ap(unit[R, A => B](f)))
+      case (_throw: Throw, Done(f))             => _throw
+      case (Done(a), Blocked(br, cf))           => Blocked[R, B](br, unit[R, A](a).ap(cf))
       case (Blocked(bra, ca), Blocked(brf, cf)) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ca.ap(cf))
-      case (Throw(t), Blocked(brf, cf)) => Blocked(brf, throwF[R, A](t).ap(cf))
-      case (_, _throw: Throw) => _throw
+      case (Throw(t), Blocked(brf, cf))         => Blocked(brf, throwF[R, A](t).ap(cf))
+      case (_, _throw: Throw)                   => _throw
     }
   }
 
   // Por alguna razón poner este método en el companion object (recibiendo un objeto de tipo [Fetch]) no compila.
   // Es mejor tener esto por fuera para desalentar su uso con cada Fetch creado sino solamente con el Fetch final.
   def run(dataSource: R[_] => DataSource[R])(implicit executionContext: ExecutionContext,
-    dataCache: Atom[DataCache[R]],
-    statsAtom: Atom[Stats]): Future[A] = {
+                                             dataCache: Atom[DataCache[R]],
+                                             statsAtom: Atom[Stats]): Future[A] = {
     result(dataCache) match {
-      case Done(a) => Future.successful(a)
+      case Done(a)  => Future.successful(a)
       case Throw(t) => Future.failed(t)
       case Blocked(brs, cont) =>
         val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
@@ -75,9 +75,9 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   def catchF[B >: A](handle: Throwable => Fetch[R, B]): Fetch[R, B] = Fetch[R, B] { dc =>
     val r = result(dc)
     r match {
-      case Throw(e) => handle(e).result(dc)
+      case Throw(e)          => handle(e).result(dc)
       case Blocked(br, cont) => cont.catchF(handle).result(dc)
-      case _ => r
+      case _                 => r
     }
   }
 
@@ -118,9 +118,9 @@ trait FetchInstance {
           Blocked(Seq(br), cont(box))
         case Some(box) =>
           box() match {
-            case NotFetched => Blocked(Seq.empty, cont(box))
+            case NotFetched          => Blocked(Seq.empty, cont(box))
             case FetchSuccess(value) => Done(value)
-            case FetchFailure(t) => Throw(t)
+            case FetchFailure(t)     => Throw(t)
           }
       }
     }

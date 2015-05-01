@@ -14,8 +14,7 @@ object TestRequest {
     Arbitrary(Gen.frequency[Int => Int](
       (1, Gen.const((x: Int) => x)),
       (1, Gen.const((x: Int) => x + 1)),
-      (3, A.arbitrary.map(a => (_: Int) => a))
-    ))
+      (3, A.arbitrary.map(a => (_: Int) => a))))
 
   val genInt = Gen.oneOf(1, 2, 3)
   val genFInt = new SaxlGens[TestRequest, Int](genInt, genInt.map(n => TestRequest(n)))
