@@ -1,13 +1,17 @@
 package saxl
 
-import org.scalatest.FunSuite
-import scalaz.scalacheck.ScalazProperties.monad
+import org.scalatest.PropSpec
+import org.scalatest.prop.Checkers
 
 /**
  * Created by mglvl on 29/04/15.
  */
-class FetchTests extends FetchProperties {
+class FetchTests extends PropSpec with Checkers {
 
-  checkAll("monad laws", monad.laws[Fetch[TestRequest, ?]])
+  for {
+    (name, prop) <- FetchProperties.properties
+  } yield property(name) {
+    check(prop)
+  }
 
 }

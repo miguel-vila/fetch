@@ -1,38 +1,28 @@
 package saxl
 
-import org.scalacheck.Properties
-import org.scalacheck.Prop.forAll
+import org.scalacheck.{ Arbitrary, Properties }
+import scalaz.Equal
+import scalaz.scalacheck.ScalazProperties.{ monad, functor, applicative, bind }
+import scalaz.scalacheck.ScalazProperties
 
 /**
  * Created by mglvl on 27/04/15.
  */
-class FetchProperties extends Properties("Fetch properties") {
+object FetchProperties {
 
-  def checkAll(name: String, props: Properties) = {
-    val properties = Set(
-      "monad.applicative.apply.functor.invariantFunctor.identity",
-      "monad.applicative.apply.functor.invariantFunctor.composite",
-      "monad.applicative.apply.functor.identity",
-      "monad.applicative.apply.functor.composite",
-      // "monad.applicative.apply.composition", //@TODO <- ver por que falla
-      "monad.applicative.identity",
-      "monad.applicative.homomorphism",
-      "monad.applicative.interchange",
-      "monad.applicative.map consistent with ap",
-      "monad.bind.apply.functor.invariantFunctor.identity",
-      "monad.bind.apply.functor.invariantFunctor.composite",
-      "monad.bind.apply.functor.identity",
-      "monad.bind.apply.functor.composite",
-      // "monad.bind.apply.composition", //@TODO <- ver por que falla
-      "monad.bind.associativity",
-      // "monad.bind.ap consistent with bind", //@TODO <- ver por que falla
-      "monad.right identity",
-      "monad.left identity"
-    )
+  def properties(implicit am: Arbitrary[Fetch[TestRequest, Int]],
+                 af: Arbitrary[Int => Fetch[TestRequest, Int]], ag: Arbitrary[Fetch[TestRequest, Int => Int]], e: Equal[Fetch[TestRequest, Int]]) = new Properties("Fetch properties") {
+    include(functor.laws[Fetch[TestRequest, ?]])
+    //property("apply.composition") = ScalazProperties.apply.composition[Fetch[TestRequest, ?], Int, Int, Int]
+    property("applicative.identity") = applicative.identity[Fetch[TestRequest, ?], Int]
+    property("applicative.homomorphism") = applicative.homomorphism[Fetch[TestRequest, ?], Int, Int]
+    property("applicative.interchange") = applicative.interchange[Fetch[TestRequest, ?], Int, Int]
+    //property("applicative.map consistent with ap") = applicative.mapApConsistency[Fetch[TestRequest, ?], Int, Int]
 
-    for ((name2, prop) <- props.properties if properties contains name2) yield {
-      property(name + ":" + name2) = prop
-    }
-  }
+    property("bind.associativity") = bind.associativity[Fetch[TestRequest, ?], Int, Int, Int]
+
+    property("monad.right identity") = monad.rightIdentity[Fetch[TestRequest, ?], Int]
+    property("monad.left identity") = monad.leftIdentity[Fetch[TestRequest, ?], Int, Int]
+  }.properties
 
 }
