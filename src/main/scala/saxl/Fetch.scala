@@ -41,8 +41,8 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
       case Done(a)  => Future.successful(a)
       case Throw(t) => Future.failed(t)
       case Blocked(brs, cont) =>
-        val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
         val t0 = System.currentTimeMillis()
+        val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
         //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
         val dataSourceFutures = groupedByDataSource.map {
           case (ds, brs) =>
@@ -55,18 +55,16 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
         } //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
 
         val sequence = Future.sequence(dataSourceFutures)
-        val roundFuture = sequence.map(_ => ())
 
         for {
-          _ <- roundFuture
-          roundTime = (System.currentTimeMillis() - t0).toInt
           namesAndStats <- sequence
+          roundTime = (System.currentTimeMillis() - t0).toInt
           hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()) { case (hm, (dsName, dsStats)) => hm.updated(dsName, dsStats) }
           roundStats = RoundStats(roundTime, hm)
           stats = statsAtom()
         } yield statsAtom.update(stats.copy(stats = roundStats :: stats.stats))
 
-        roundFuture.flatMap { _ =>
+        sequence.map(_ => ()).flatMap { _ =>
           cont.run(dataSource)
         }
     }
@@ -105,7 +103,7 @@ trait FetchInstance {
 
   def dataFetch[R[_], A](request: R[A]): Fetch[R, A] = {
     def cont(box: Atom[FetchStatus[A]]) = Fetch[R, A] { _ =>
-      val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [runFetch]
+      val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [Fetch.run]
       Done(a)
     }
     Fetch[R, A] { dca =>
@@ -132,8 +130,11 @@ trait FetchInstance {
    *
    * Puede ser utilizada por implementaciones
    */
-  def processBlockedRequest[R[_], A](br: BlockedRequest[R, A], futureImpl: Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def processBlockedRequest[R[_], A](br: BlockedRequest[R, A], futureImpl: => Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
+
+    val t0 = System.currentTimeMillis()
     futureImpl map { a =>
+      println(s"Processed: ${br.request} -> ${System.currentTimeMillis() - t0}")
       br.fetchStatus.update(FetchSuccess(a))
     } recover {
       case t: Throwable =>

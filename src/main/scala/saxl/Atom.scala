@@ -7,8 +7,7 @@ object Atom {
 }
 case class Atom[+A] private (state: AtomicReference[Any]) extends AnyVal {
   def apply(): A = state.get().asInstanceOf[A]
-  def update(value: Any /*Machetazo para poder hacer que Atom sea covariante*/ ): Unit = {
-    //assert(value.isInstanceOf[A])
-    state.set(value.asInstanceOf[A])
+  def update[B >: A](value: B): Unit = {
+    state.set(value)
   }
 }
