@@ -97,6 +97,7 @@ object Fetch {
 
   def traverse[R[_], A, G[_], B](value: G[A])(f: A => Fetch[R, B])(implicit G: Traverse[G]): Fetch[R, G[B]] = fetchInstance.traverse(value)(f)
 
+  def map2[R[_], A, B, C](f1: Fetch[R, A], f2: Fetch[R, B])(f: (A, B) => C): Fetch[R, C] = f2.ap(f1.ap(unit(f.curried)))
 }
 
 trait FetchInstance {
