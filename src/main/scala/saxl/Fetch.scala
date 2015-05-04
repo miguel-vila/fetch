@@ -64,7 +64,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
           stats = statsAtom()
         } yield statsAtom.update(stats.copy(stats = roundStats :: stats.stats))
 
-        sequence.map(_ => ()).flatMap { _ =>
+        sequence.flatMap { _ =>
           cont.run(dataSource)
         }
     }
