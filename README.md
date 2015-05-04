@@ -11,28 +11,7 @@ Un ejemplo de su potencial uso, tomado del artículo, se encuentra [acá](https:
 * La inclusión y uso de alguna librería de macros que permita convertir llamadas a `flatMap` que ignoran el parámetro en llamadas a la función `ap` del aplicativo. Esencialmente la sección 7 del artículo. En su defecto [esto](https://github.com/puffnfresh/wartremover#noneedformonad) puede ser útil.
 * Terminar de introducir cosas de la sección 8.1.
 * Introducir cambios de la sección 9.1 del artículo.
-
-## Ideas de Stitch
-
-Algunas ideas provenientes de Stitch que se podrían incluir:
-
-* Objetivos:
-
-![Imgur](http://i.imgur.com/zLAp8nH.png)
-
-* Modelo de ejecución:
-![Imgur](http://i.imgur.com/INgfeae.png)
-
-* Agrupación de queries:
-![Imgur](http://i.imgur.com/Iezcc5l.png)
-
-* Enmascarar reintentos:
-![Imgur](http://i.imgur.com/OGDuk5R.png)
-
-* n+1 problem -> hacer batch a nivel de SQL:
-![Imgur](http://i.imgur.com/wCayzK4.png)
-
-
+* [Ideas de stitch que se podrían introducir](https://github.com/miguel-vila/haxl-poc/wiki/Ideas-de-Stitch#ideas-de-stitch)
 
 ## Fuentes
 
