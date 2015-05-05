@@ -7,5 +7,5 @@ import scala.concurrent.{ ExecutionContext, Future }
  */
 abstract class DataSource[R[_]] {
   def name: String
-  def fetch(blockedRequests: Seq[BlockedRequest[R, _]])(implicit executionContext: ExecutionContext): Future[Unit]
+  def fetch(requests: Seq[R[_]])(implicit executionContext: ExecutionContext): Future[Seq[_]]
 }

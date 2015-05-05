@@ -153,27 +153,22 @@ class Example {
   /**
    * Función que ejecuta un query y realiza el side effect correspondiente
    */
-  def processRequest(br: BlockedExampleRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    br match {
-      case bra @ BlockedRequest(GetPostIds, _)             => Fetch.processBlockedRequest(bra, getPostIdsImpl())
-      case bra @ BlockedRequest(GetPostInfo(postId), _)    => Fetch.processBlockedRequest(bra, getPostInfoImpl(postId))
-      case bra @ BlockedRequest(GetPostContent(postId), _) => Fetch.processBlockedRequest(bra, getPostContentImpl(postId))
-      case bra @ BlockedRequest(GetPostViews(postId), _)   => Fetch.processBlockedRequest(bra, getPostViewsImpl(postId))
+  def processRequest(r: ExampleRequest[_])(implicit executionContext: ExecutionContext): Future[_] = {
+    r match {
+      case GetPostIds             => getPostIdsImpl()
+      case GetPostInfo(postId)    => getPostInfoImpl(postId)
+      case GetPostContent(postId) => getPostContentImpl(postId)
+      case GetPostViews(postId)   => getPostViewsImpl(postId)
     }
   }
 
   /**
-   * Datasource que utiliza la anterior funcion para ejecutar de forma independiente
-   * cada servicio. Es posible que dados multiples servicios uno quiera agrupar
-   * requests a la misma fuente de datos. En este ejemplo no se hace eso, cada
-   * servicio se ejecuta independientemente de los otros.
+   * Datasource que utiliza la anterior funcion para ejecutar de forma independiente cada servicio.
    */
   implicit object ExampleDataSource extends DataSource[ExampleRequest] {
     def name = "ExampleDataSource"
-    def fetch(blockedRequests: Seq[BlockedExampleRequest[_]])(implicit executionContext: ExecutionContext): Future[Unit] = {
-      for {
-        _ <- Future.traverse(blockedRequests)(processRequest)
-      } yield ()
+    def fetch(blockedRequests: Seq[ExampleRequest[_]])(implicit executionContext: ExecutionContext): Future[Seq[_]] = {
+      Future.traverse(blockedRequests)(processRequest)
     }
   }
 }

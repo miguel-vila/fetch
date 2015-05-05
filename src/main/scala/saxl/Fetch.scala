@@ -45,7 +45,14 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
         val traverse = Future.traverse(groupedByDataSource) {
           case (ds, brs) =>
             val dsT0 = System.currentTimeMillis()
-            ds.fetch(brs).map { _ =>
+            val requests = brs.map(_.request)
+            ds.fetch(requests).map { results =>
+              assert(requests.length == results.length)
+              (brs zip results) foreach {
+                case (br, res) =>
+                  br.fetchStatus.update(FetchSuccess(res))
+              }
+
               val dsTf = (System.currentTimeMillis() - dsT0).toInt
               val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
               (ds.name, dsStats)
@@ -101,7 +108,7 @@ object Fetch {
       val FetchSuccess(a) = box() // este pattern match se garantiza exitóso en [Fetch.run]
       Done(a)
     }
-    Fetch[R, A] { dca =>
+    Fetch { dca =>
       val dc = dca()
       dc.lookup(request) match {
         case None =>
@@ -126,7 +133,6 @@ object Fetch {
    * Puede ser utilizada por implementaciones
    */
   def processBlockedRequest[R[_], A](br: BlockedRequest[R, A], futureImpl: => Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
-
     val t0 = System.currentTimeMillis()
     futureImpl map { a =>
       println(s"Processed: ${br.request} -> ${System.currentTimeMillis() - t0}")
