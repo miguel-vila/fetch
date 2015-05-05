@@ -42,19 +42,20 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
         val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
         //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
 
+        //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
         val traverse = Future.traverse(groupedByDataSource) {
           case (ds, brs) =>
             val dsT0 = System.currentTimeMillis()
             val requests = brs.map(_.request)
             ds.fetch(requests).map { results =>
+              val dsTf = (System.currentTimeMillis() - dsT0).toInt
+              val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
               assert(requests.length == results.length)
               (brs zip results) foreach {
                 case (br, res) =>
                   br.fetchStatus.update(FetchSuccess(res))
               }
 
-              val dsTf = (System.currentTimeMillis() - dsT0).toInt
-              val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
               (ds.name, dsStats)
             }
         }
@@ -123,23 +124,6 @@ object Fetch {
             case FetchFailure(t)     => Throw(t)
           }
       }
-    }
-  }
-
-  /**
-   * Función utilitaria para setear el fetchStatus de un BloquedRequest
-   * una vez se haya completado el Futuro
-   *
-   * Puede ser utilizada por implementaciones
-   */
-  def processBlockedRequest[R[_], A](br: BlockedRequest[R, A], futureImpl: => Future[A])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    val t0 = System.currentTimeMillis()
-    futureImpl map { a =>
-      println(s"Processed: ${br.request} -> ${System.currentTimeMillis() - t0}")
-      br.fetchStatus.update(FetchSuccess(a))
-    } recover {
-      case t: Throwable =>
-        br.fetchStatus.update(FetchFailure(t))
     }
   }
 

@@ -31,7 +31,7 @@ class Example {
   /**
    * Tipos que representan los requests que atienden los servicios
    */
-  trait ExampleRequest[T]
+  sealed trait ExampleRequest[T]
 
   case object GetPostIds extends ExampleRequest[PostIds]
 
