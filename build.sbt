@@ -8,7 +8,7 @@ addCompilerPlugin("org.spire-math" % "kind-projector_2.11" % "0.5.2")
 
 libraryDependencies ++= Seq(
   "org.scalaz"      %%  "scalaz-core"               % "7.1.1",
-  "org.scalatest"   %   "scalatest_2.11"            % "2.2.1"   % "test",
+  "org.scalatest"   %%  "scalatest"                 % "2.2.1"   % "test",
   "org.scalaz"      %%  "scalaz-scalacheck-binding" % "7.1.1"   % "test",
   "org.scalacheck"  %%  "scalacheck"                % "1.12.2"  % "test")
 
@@ -25,8 +25,8 @@ scalacOptions ++= Seq(
   "-Xlint",
   "-Yno-adapted-args",
   "-Ywarn-dead-code",        // N.B. doesn't work well with the ??? hole
-  //"-Ywarn-numeric-widen",
-  //"-Ywarn-value-discard",
+  "-Ywarn-numeric-widen",
+  "-Ywarn-value-discard",
   "-Xfuture"
 )
 
