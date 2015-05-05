@@ -7,26 +7,26 @@ import scalaz.{ Monad, Applicative, Traverse }
 case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   import Fetch._
 
-  def flatMap[B](f: A => Fetch[R, B]): Fetch[R, B] = Fetch[R, B] { dc =>
+  def flatMap[B](f: A => Fetch[R, B]): Fetch[R, B] = Fetch { dc =>
     result(dc) match {
       case Done(a)           => f(a).result(dc)
-      case Blocked(br, cont) => Blocked[R, B](br, cont flatMap f)
+      case Blocked(br, cont) => Blocked(br, cont flatMap f)
       case _throw: Throw     => _throw
     }
   }
 
-  def map[B](f: A => B): Fetch[R, B] = flatMap { f andThen unit[R, B] }
+  def map[B](f: A => B): Fetch[R, B] = flatMap { f andThen unit }
 
-  def ap[B](ff: => Fetch[R, A => B]): Fetch[R, B] = Fetch[R, B] { dc =>
+  def ap[B](ff: => Fetch[R, A => B]): Fetch[R, B] = Fetch { dc =>
     val ra = result(dc)
     val rf = ff.result(dc)
     (ra, rf) match {
       case (Done(a), Done(f))                   => Done(f(a))
-      case (Blocked(br, ca), Done(f))           => Blocked(br, ca.ap(unit[R, A => B](f)))
+      case (Blocked(br, ca), Done(f))           => Blocked(br, ca.ap(unit(f)))
       case (_throw: Throw, Done(f))             => _throw
-      case (Done(a), Blocked(br, cf))           => Blocked[R, B](br, unit[R, A](a).ap(cf))
+      case (Done(a), Blocked(br, cf))           => Blocked(br, unit(a).ap(cf))
       case (Blocked(bra, ca), Blocked(brf, cf)) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ca.ap(cf))
-      case (Throw(t), Blocked(brf, cf))         => Blocked(brf, throwF[R, A](t).ap(cf))
+      case (Throw(t), Blocked(brf, cf))         => Blocked(brf, throwF(t).ap(cf))
       case (_, _throw: Throw)                   => _throw
     }
   }
@@ -35,8 +35,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
                                                      dataCache: Atom[DataCache[R]],
                                                      statsAtom: Atom[Stats]): Future[A] = {
     result(dataCache) match {
-      case Done(a)  =>
-        println("Fucking done!!!"); Future.successful(a)
+      case Done(a)  => Future.successful(a)
       case Throw(t) => Future.failed(t)
       case Blocked(brs, cont) =>
         val t0 = System.currentTimeMillis()
@@ -68,7 +67,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
     }
   }
 
-  def catchF[B >: A](handle: Throwable => Fetch[R, B]): Fetch[R, B] = Fetch[R, B] { dc =>
+  def catchF[B >: A](handle: Throwable => Fetch[R, B]): Fetch[R, B] = Fetch { dc =>
     val r = result(dc)
     r match {
       case Throw(e)          => handle(e).result(dc)
@@ -81,9 +80,9 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
 
 object Fetch {
 
-  def unit[R[_], A](a: A): Fetch[R, A] = Fetch[R, A](_ => Done(a))
+  def unit[R[_], A](a: A): Fetch[R, A] = Fetch(_ => Done(a))
 
-  def throwF[R[_], A](throwable: Throwable): Fetch[R, A] = Fetch[R, A](_ => Throw(throwable))
+  def throwF[R[_], A](throwable: Throwable): Fetch[R, A] = Fetch(_ => Throw(throwable))
 
   implicit def fetchInstance[R[_]] = new Monad[Fetch[R, ?]] with Applicative[Fetch[R, ?]] {
     override def bind[A, B](fa: Fetch[R, A])(f: A => Fetch[R, B]): Fetch[R, B] = fa.flatMap(f)
