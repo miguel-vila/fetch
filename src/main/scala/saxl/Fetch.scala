@@ -8,8 +8,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   import Fetch._
 
   def flatMap[B](f: A => Fetch[R, B]): Fetch[R, B] = Fetch[R, B] { dc =>
-    val x = result(dc)
-    x match {
+    result(dc) match {
       case Done(a)           => f(a).result(dc)
       case Blocked(br, cont) => Blocked[R, B](br, cont flatMap f)
       case _throw: Throw     => _throw
@@ -32,19 +31,19 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
     }
   }
 
-  // Por alguna razón poner este método en el companion object (recibiendo un objeto de tipo [Fetch]) no compila.
-  // Es mejor tener esto por fuera para desalentar su uso con cada Fetch creado sino solamente con el Fetch final.
-  def run(dataSource: R[_] => DataSource[R])(implicit executionContext: ExecutionContext,
-                                             dataCache: Atom[DataCache[R]],
-                                             statsAtom: Atom[Stats]): Future[A] = {
+  private def run(dataSource: R[_] => DataSource[R])(implicit executionContext: ExecutionContext,
+                                                     dataCache: Atom[DataCache[R]],
+                                                     statsAtom: Atom[Stats]): Future[A] = {
     result(dataCache) match {
-      case Done(a)  => Future.successful(a)
+      case Done(a)  =>
+        println("Fucking done!!!"); Future.successful(a)
       case Throw(t) => Future.failed(t)
       case Blocked(brs, cont) =>
         val t0 = System.currentTimeMillis()
         val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
         //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
-        val dataSourceFutures = groupedByDataSource.map {
+
+        val traverse = Future.traverse(groupedByDataSource) {
           case (ds, brs) =>
             val dsT0 = System.currentTimeMillis()
             ds.fetch(brs).map { _ =>
@@ -52,19 +51,18 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
               val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
               (ds.name, dsStats)
             }
-        } //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
-
-        val sequence = Future.sequence(dataSourceFutures)
+        }
+        //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
 
         for {
-          namesAndStats <- sequence
+          namesAndStats <- traverse
           roundTime = (System.currentTimeMillis() - t0).toInt
           hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()) { case (hm, (dsName, dsStats)) => hm.updated(dsName, dsStats) }
           roundStats = RoundStats(roundTime, hm)
           stats = statsAtom()
         } yield statsAtom.update(stats.copy(stats = roundStats :: stats.stats))
 
-        sequence.flatMap { _ =>
+        traverse.flatMap { _ =>
           cont.run(dataSource)
         }
     }
@@ -98,9 +96,6 @@ object Fetch {
   def traverse[R[_], A, G[_], B](value: G[A])(f: A => Fetch[R, B])(implicit G: Traverse[G]): Fetch[R, G[B]] = fetchInstance.traverse(value)(f)
 
   def map2[R[_], A, B, C](f1: Fetch[R, A], f2: Fetch[R, B])(f: (A, B) => C): Fetch[R, C] = f2.ap(f1.ap(unit(f.curried)))
-}
-
-trait FetchInstance {
 
   def dataFetch[R[_], A](request: R[A]): Fetch[R, A] = {
     def cont(box: Atom[FetchStatus[A]]) = Fetch[R, A] { _ =>
@@ -141,6 +136,14 @@ trait FetchInstance {
       case t: Throwable =>
         br.fetchStatus.update(FetchFailure(t))
     }
+  }
+
+  def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): Future[(A, DataCache[R], Stats)] = {
+    implicit val dca = Atom(dataCache)
+    implicit val stats = Atom(Stats())
+    for {
+      value <- fetch.run(dataSource)
+    } yield (value, dca(), stats())
   }
 
 }

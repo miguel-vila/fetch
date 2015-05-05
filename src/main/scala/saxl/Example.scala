@@ -9,7 +9,7 @@ import scalaz.std.stream.streamInstance
 /**
  * Created by mglvl on 23/04/15.
  */
-class Example extends FetchInstance {
+class Example {
 
   /**
    * Tipos que representan las posibles respuestas de un servicio
@@ -47,13 +47,13 @@ class Example extends FetchInstance {
    * alguna lógica de negocio
    */
 
-  val getPostIds = dataFetch(GetPostIds)
+  val getPostIds = Fetch.dataFetch(GetPostIds)
 
-  def getPostInfo(postId: PostId) = dataFetch(GetPostInfo(postId))
+  def getPostInfo(postId: PostId) = Fetch.dataFetch(GetPostInfo(postId))
 
-  def getPostContent(postId: PostId) = dataFetch(GetPostContent(postId))
+  def getPostContent(postId: PostId) = Fetch.dataFetch(GetPostContent(postId))
 
-  def getPostViews(postId: PostId) = dataFetch(GetPostViews(postId))
+  def getPostViews(postId: PostId) = Fetch.dataFetch(GetPostViews(postId))
 
   /**
    * Representa un documento HTML
@@ -155,10 +155,10 @@ class Example extends FetchInstance {
    */
   def processRequest(br: BlockedExampleRequest[_])(implicit executionContext: ExecutionContext): Future[Unit] = {
     br match {
-      case bra @ BlockedRequest(GetPostIds, _)             => processBlockedRequest(bra, getPostIdsImpl())
-      case bra @ BlockedRequest(GetPostInfo(postId), _)    => processBlockedRequest(bra, getPostInfoImpl(postId))
-      case bra @ BlockedRequest(GetPostContent(postId), _) => processBlockedRequest(bra, getPostContentImpl(postId))
-      case bra @ BlockedRequest(GetPostViews(postId), _)   => processBlockedRequest(bra, getPostViewsImpl(postId))
+      case bra @ BlockedRequest(GetPostIds, _)             => Fetch.processBlockedRequest(bra, getPostIdsImpl())
+      case bra @ BlockedRequest(GetPostInfo(postId), _)    => Fetch.processBlockedRequest(bra, getPostInfoImpl(postId))
+      case bra @ BlockedRequest(GetPostContent(postId), _) => Fetch.processBlockedRequest(bra, getPostContentImpl(postId))
+      case bra @ BlockedRequest(GetPostViews(postId), _)   => Fetch.processBlockedRequest(bra, getPostViewsImpl(postId))
     }
   }
 
@@ -181,8 +181,6 @@ class Example extends FetchInstance {
 object Test extends Example with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
-  implicit val cache = Atom(DataCache[ExampleRequest]())
-  implicit val stats = Atom(Stats())
 
   println("About to run")
 
@@ -191,13 +189,26 @@ object Test extends Example with App {
   /**
    * Ejecucion
    */
-  pageHTML.run(dataSource).onComplete {
-    case Success(html) =>
+  Fetch.run(pageHTML)(dataSource).onComplete {
+    case Success((html, cache, stats)) =>
       println(s"Success!: $html")
       println("Caché:")
-      println(cache())
+      println(cache)
       println("Stats:")
-      println(stats())
+      println(stats)
+
+      println("------ Rerun ------")
+
+      Fetch.run(pageHTML)(dataSource, cache).onComplete {
+        case Success((html, cache2, stats2)) =>
+          println(s"Success2: $html")
+          assert(cache == cache2)
+          println("Stats2:")
+          println(stats2)
+          println("----Done!----")
+        case Failure(t) => println(s"Failure: $t")
+      }
+
     case Failure(t) => println(s"Failure: $t")
   }
 
