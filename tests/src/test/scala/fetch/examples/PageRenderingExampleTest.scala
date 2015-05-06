@@ -13,9 +13,10 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
 
   "PageRenderingExample" must {
 
-    def getValueAt[A](dataCache: DataCache[ExampleRequest])(k: ExampleRequest[A]): FetchStatus[A] = {
+    def getValueAt[A](dataCache: DataCache[ExampleRequest])(k: ExampleRequest[A]): A = {
       val Some(atom) = dataCache.lookup(k)
-      atom()
+      val FetchSuccess(value) = atom()
+      value
     }
 
     "return results when the fetches are succesfull" in {
@@ -23,18 +24,34 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
         case (html, cache, stats) =>
           html shouldEqual (HTML)
           stats.numberOfRounds shouldEqual (3)
-          def cacheValueAt[A]: ExampleRequest[A] => FetchStatus[A] = getValueAt(cache)
-          cacheValueAt(GetPostIds) shouldEqual (FetchSuccess(postsIds))
+          def cacheValueAt[A]: ExampleRequest[A] => A = getValueAt(cache)
+          cacheValueAt(GetPostIds) shouldEqual (postsIds)
           postInfoData foreach {
             case (pid, pinfo) =>
-              cacheValueAt(GetPostInfo(pid)) shouldEqual (FetchSuccess(pinfo))
+              cacheValueAt(GetPostInfo(pid)) shouldEqual (pinfo)
           }
           postViewsData foreach {
             case (pid, pviews) =>
-              cacheValueAt(GetPostViews(pid)) shouldEqual (FetchSuccess(pviews))
+              cacheValueAt(GetPostViews(pid)) shouldEqual (pviews)
           }
           val cacheSize = 1 /*post ids fetch*/ + postInfoData.size + postViewsData.size + 5 /*los 5 de PostContent*/
           cache.size shouldEqual (cacheSize)
+      }
+    }
+
+    "when replaying with the same cache it just reruns without making any fetch" in {
+      val future = for {
+        (html1, cache1, stats1) <- Fetch.run(pageHTML)(dataSource)
+        (html2, cache2, stats2) <- Fetch.run(pageHTML)(dataSource, cache1)
+      } yield {
+        (html1, cache1, stats1, html2, cache2, stats2)
+      }
+
+      whenReady(future) {
+        case (html1, cache1, stats1, html2, cache2, stats2) =>
+          html1 shouldEqual (html2) //Results are the same when replaying
+          cache1 shouldEqual (cache2) //Caches should be the same when replaying
+          stats2.numberOfRounds shouldEqual (0) //Number of rounds should be zero when replaying
       }
     }
 
