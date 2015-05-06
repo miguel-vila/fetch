@@ -1,15 +1,18 @@
-package fetch
+package fetch.examples.page_rendering
 
 import java.util.Date
+
+import fetch.{ DataSource, BlockedRequest, Fetch }
+
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.util.{ Failure, Success }
-import scalaz.syntax.applicative._
 import scalaz.std.stream.streamInstance
+import scalaz.syntax.applicative._
 
 /**
  * Created by mglvl on 23/04/15.
  */
-class Example {
+trait PageRenderingExample {
 
   /**
    * Tipos que representan las posibles respuestas de un servicio
@@ -173,7 +176,7 @@ class Example {
   }
 }
 
-object Test extends Example with App {
+object Test extends PageRenderingExample with App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -195,11 +198,10 @@ object Test extends Example with App {
       println("------ Rerun ------")
 
       Fetch.run(pageHTML)(dataSource, cache).onComplete {
-        case Success((html, cache2, stats2)) =>
+        case Success((html2, cache2, _)) =>
           println(s"Success2: $html")
           assert(cache == cache2)
-          println("Stats2:")
-          println(stats2)
+          assert(html == html2)
           println("----Done!----")
         case Failure(t) => println(s"Failure: $t")
       }
