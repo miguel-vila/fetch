@@ -1,8 +1,10 @@
-package fetch
+package fetch.properties
 
-import scalaz.syntax.equal._
+import fetch._
 import org.scalacheck.Gen
+
 import scalaz.Equal
+import scalaz.syntax.equal._
 
 /**
  * Created by mglvl on 29/04/15.

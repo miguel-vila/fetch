@@ -1,5 +1,6 @@
-package fetch
+package fetch.properties
 
+import fetch._
 import org.scalacheck.Gen
 
 /**

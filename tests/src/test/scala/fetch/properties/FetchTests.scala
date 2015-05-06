@@ -1,4 +1,4 @@
-package fetch
+package fetch.properties
 
 import org.scalatest.PropSpec
 import org.scalatest.prop.Checkers

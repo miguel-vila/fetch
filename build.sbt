@@ -55,7 +55,14 @@ lazy val examples = Project(
     commonSettings: _*
   ).dependsOn(core)
 
+lazy val tests = Project(
+  id = "fetch-tests",
+  base = file("./tests")
+).settings(
+    commonSettings: _*
+  ).dependsOn(core, examples)
+
 lazy val root = Project(
   id = "fetch",
   base = file(".")
-).aggregate(core, examples)
+).aggregate(core, examples, tests)

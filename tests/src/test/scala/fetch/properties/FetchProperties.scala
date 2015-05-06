@@ -1,9 +1,9 @@
-package fetch
+package fetch.properties
 
+import fetch.Fetch
 import org.scalacheck.{ Arbitrary, Properties }
 import scalaz.Equal
-import scalaz.scalacheck.ScalazProperties.{ monad, functor, applicative, bind }
-import scalaz.scalacheck.ScalazProperties
+import scalaz.scalacheck.ScalazProperties.{ applicative, bind, functor, monad }
 
 /**
  * Created by mglvl on 27/04/15.

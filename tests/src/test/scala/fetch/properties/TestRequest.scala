@@ -1,6 +1,7 @@
-package fetch
+package fetch.properties
 
 import org.scalacheck.{ Arbitrary, Gen }
+
 import scalaz.Equal
 
 /**
