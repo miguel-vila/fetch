@@ -16,7 +16,8 @@ val commonSettings = scalariformSettings ++ Seq(
       CompileDeps.scalazCore,
       TestDeps.scalatest         % "test",
       TestDeps.scalazScalacheck  % "test",
-      TestDeps.scalacheck        % "test"
+      TestDeps.scalacheck        % "test",
+      TestDeps.mockito           % "test"
     ),
     scalacOptions ++= Seq(
       "-deprecation",

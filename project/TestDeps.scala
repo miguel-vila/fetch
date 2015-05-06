@@ -9,4 +9,5 @@ object TestDeps {
 
   val scalacheck = "org.scalacheck" %% "scalacheck" % "1.12.2"
 
+  val mockito = "org.mockito"         %   "mockito-core"                  % "1.10.8"
 }
