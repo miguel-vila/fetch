@@ -1,4 +1,4 @@
-package saxl
+package fetch
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.{ ExecutionContext, Future }

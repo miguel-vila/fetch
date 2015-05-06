@@ -1,4 +1,4 @@
-package saxl
+package fetch
 
 import org.scalatest.PropSpec
 import org.scalatest.prop.Checkers

@@ -1,4 +1,4 @@
-package saxl
+package fetch
 
 import scala.collection.immutable.HashMap
 

@@ -1,4 +1,4 @@
-package saxl
+package fetch
 
 import org.scalacheck.{ Arbitrary, Gen }
 import scalaz.Equal

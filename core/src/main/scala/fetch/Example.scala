@@ -1,4 +1,4 @@
-package saxl
+package fetch
 
 import java.util.Date
 import scala.concurrent.{ ExecutionContext, Future }
