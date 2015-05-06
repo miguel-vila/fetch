@@ -21,8 +21,7 @@ trait PageRenderingExample {
   type PostViews = Int
   type PostDate = Date
 
-  trait PostContent
-  object PostContent extends PostContent
+  case class PostContent(content: String)
 
   case class PostInfo(
     postId: PostId,
@@ -117,8 +116,11 @@ trait PageRenderingExample {
   /**
    * Implementaciones de los servicios base
    */
+
+  val postsIds = Stream(1, 2, 3, 4, 5, 6, 7)
+
   def getPostIdsImpl(): Future[PostIds] = {
-    Future.successful(Stream(1, 2, 3, 4, 5, 6, 7))
+    Future.successful(postsIds)
   }
 
   val postInfoData = Map(
@@ -134,8 +136,12 @@ trait PageRenderingExample {
     Future.successful(postInfoData(postId))
   }
 
+  val postContentData = postsIds.map { pid =>
+    pid -> PostContent(s"content for post $pid")
+  }.toMap
+
   def getPostContentImpl(postId: PostId): Future[PostContent] = {
-    Future.successful(PostContent)
+    Future.successful(postContentData(postId))
   }
 
   val postViewsData = Map(
@@ -174,6 +180,9 @@ trait PageRenderingExample {
       Future.traverse(blockedRequests)(processRequest)
     }
   }
+
+  // En este ejemplo solo hay un datasource -> todos los requests son atendidos por él
+  def dataSource(request: ExampleRequest[_]): DataSource[ExampleRequest] = ExampleDataSource
 }
 
 object Test extends PageRenderingExample with App {
@@ -182,8 +191,6 @@ object Test extends PageRenderingExample with App {
 
   println("About to run")
 
-  // En este ejemplo solo hay un datasource -> todos los requests son atendidos por él
-  def dataSource(request: ExampleRequest[_]): DataSource[ExampleRequest] = ExampleDataSource
   /**
    * Ejecucion
    */

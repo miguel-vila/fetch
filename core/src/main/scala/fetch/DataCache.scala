@@ -11,6 +11,8 @@ case class DataCache[R[_]](private val map: HashMap[Any, Atom[FetchStatus[_]]] =
 
   def insert[A](r: R[A], v: Atom[FetchStatus[A]]): DataCache[R] = DataCache[R](map + (r -> v))
 
+  def size = map.size
+
   override def toString() = {
     map.toStream.map { case (k, v) => s"$k -> $v" }.mkString("\n")
   }
