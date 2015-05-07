@@ -2,7 +2,7 @@ package fetch
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.{ ExecutionContext, Future }
-import scalaz.{ Monad, Applicative, Traverse }
+import scalaz.{ DList, Monad, Applicative, Traverse }
 
 case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   import Fetch._
@@ -25,7 +25,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
       case (Blocked(br, ca), Done(f))           => Blocked(br, ca.ap(unit(f)))
       case (_throw: Throw, Done(f))             => _throw
       case (Done(a), Blocked(br, cf))           => Blocked(br, unit(a).ap(cf))
-      case (Blocked(bra, ca), Blocked(brf, cf)) => Blocked(bra ++ brf /*@TODO <- ver eficiencia de esta operación, elegir estructura de datos adecuada*/ , ca.ap(cf))
+      case (Blocked(bra, ca), Blocked(brf, cf)) => Blocked(bra ++ brf, ca.ap(cf))
       case (Throw(t), Blocked(brf, cf))         => Blocked(brf, throwF(t).ap(cf))
       case (_, _throw: Throw)                   => _throw
     }
@@ -39,7 +39,22 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
       case Throw(t) => Future.failed(t)
       case Blocked(brs, cont) =>
         val t0 = System.currentTimeMillis()
-        val groupedByDataSource = brs.groupBy(br => dataSource(br.request))
+
+        // @TODO ver que la siguiente conversión a lista no tenga consecuencias de performance v.s. hacer el groupBy a mano como se muestra abajo
+        val groupedByDataSource = brs.toList.groupBy(br => dataSource(br.request))
+
+        /*
+        val groupedByDataSource = brs.foldr(Map[DataSource[R], List[BlockedRequest[R, _]]]()) {
+          (br, map) =>
+            val req = br.request
+            val ds = dataSource(req)
+            val v = map.get(ds)
+            v match {
+              case None      => map.updated(ds, List(br))
+              case Some(brs) => map.updated(ds, br :: brs)
+            }
+        }
+        */
         //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
 
         //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
@@ -116,10 +131,10 @@ object Fetch {
           val box: Atom[FetchStatus[A]] = Atom(NotFetched)
           dca.update(dc.insert(request, box))
           val br = BlockedRequest(request, box)
-          Blocked(Seq(br), cont(box))
+          Blocked(DList[BlockedRequest[R, _]](br), cont(box))
         case Some(box) =>
           box() match {
-            case NotFetched          => Blocked(Seq.empty, cont(box))
+            case NotFetched          => Blocked(DList[BlockedRequest[R, _]](), cont(box))
             case FetchSuccess(value) => Done(value)
             case FetchFailure(t)     => Throw(t)
           }

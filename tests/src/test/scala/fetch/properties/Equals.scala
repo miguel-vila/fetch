@@ -18,7 +18,7 @@ class SaxlEqual[R[_], A](A: Equal[A]) {
 
   implicit def blockedEqual: Equal[Blocked[R, A]] = new Equal[Blocked[R, A]] {
     override def equal(a1: Blocked[R, A], a2: Blocked[R, A]): Boolean = {
-      a1.blockedRequests.toSet == a2.blockedRequests.toSet && a1.continuation === a2.continuation
+      a1.blockedRequests.toList.toSet == a2.blockedRequests.toList.toSet && a1.continuation === a2.continuation
     }
   }
 

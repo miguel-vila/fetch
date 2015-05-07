@@ -3,6 +3,8 @@ package fetch.properties
 import fetch._
 import org.scalacheck.Gen
 
+import scalaz.DList
+
 /**
  * Created by mglvl on 29/04/15.
  */
@@ -30,7 +32,7 @@ class SaxlGens[R[_], A](A: Gen[A], RA: Gen[R[A]]) {
   implicit def done: Gen[Done[R, A]] = A.map(a => Done(a))
 
   implicit def blocked: Gen[Blocked[R, A]] = for {
-    brs <- Gen.listOf(blockedRequest).map(_.toSeq)
+    brs <- Gen.listOf(blockedRequest).map(l => DList.fromList(l): DList[BlockedRequest[R, _]])
     f <- fetch
   } yield Blocked(brs, f)
 
