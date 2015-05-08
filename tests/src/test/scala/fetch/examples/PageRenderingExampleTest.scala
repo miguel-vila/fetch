@@ -108,8 +108,15 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
           html1 shouldEqual (html2) //Results are the same when replaying
           cache1 shouldEqual (cache2) //Caches should be the same when replaying
           verify(dataSource, times(1)).getPostIdsImpl()
-          //@TODO agregar mas verificaciones de llamadas
           stats2.numberOfRounds shouldEqual (0) //Number of rounds should be zero when replaying
+          postInfoData foreach {
+            case (pid, pinfo) =>
+              verify(dataSource, times(1)).getPostInfoImpl(pid)
+          }
+          postViewsData foreach {
+            case (pid, pviews) =>
+              verify(dataSource, times(1)).getPostViewsImpl(pid)
+          }
       }
 
     }
