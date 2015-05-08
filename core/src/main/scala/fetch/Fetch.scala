@@ -32,62 +32,71 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
   }
 
   private def run(dataSource: R[_] => DataSource[R])(implicit executionContext: ExecutionContext,
-                                                     dataCache: Atom[DataCache[R]],
-                                                     statsAtom: Atom[Stats]): Future[A] = {
-    result(dataCache) match {
-      case Done(a)  => Future.successful(a)
-      case Throw(t) => Future.failed(t)
-      case Blocked(brs, cont) =>
-        val t0 = System.currentTimeMillis()
+                                                     dataCache: Atom[DataCache[R]]): (Future[A], Future[Stats]) = {
+    var statsFs = List.empty[Future[RoundStats]]
 
-        // @TODO ver que la siguiente conversión a lista no tenga consecuencias de performance v.s. hacer el groupBy a mano como se muestra abajo
-        val groupedByDataSource = brs.toList.groupBy(br => dataSource(br.request))
+    def loop(fetch: Fetch[R, A]): Future[A] = {
+      fetch.result(dataCache) match {
+        case Done(a)  => Future.successful(a)
+        case Throw(t) => Future.failed(t)
+        case Blocked(brs, cont) =>
+          val t0 = System.currentTimeMillis()
 
-        /*
-        val groupedByDataSource = brs.foldr(Map[DataSource[R], List[BlockedRequest[R, _]]]()) {
-          (br, map) =>
-            val req = br.request
-            val ds = dataSource(req)
-            val v = map.get(ds)
-            v match {
-              case None      => map.updated(ds, List(br))
-              case Some(brs) => map.updated(ds, br :: brs)
-            }
-        }
-        */
-        //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
+          // @TODO ver que la siguiente conversión a lista no tenga consecuencias de performance v.s. hacer el groupBy a mano como se muestra abajo
+          val groupedByDataSource = brs.toList.groupBy(br => dataSource(br.request))
 
-        //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
-        val traverse = Future.traverse(groupedByDataSource) {
-          case (ds, brs) =>
-            val dsT0 = System.currentTimeMillis()
-            val requests = brs.map(_.request)
-            ds.fetch(requests).map { results =>
-              val dsTf = (System.currentTimeMillis() - dsT0).toInt
-              val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
-              assert(requests.length == results.length)
-              (brs zip results) foreach {
-                case (br, res) =>
-                  br.fetchStatus.update(FetchSuccess(res))
+          /*
+          val groupedByDataSource = brs.foldr(Map[DataSource[R], List[BlockedRequest[R, _]]]()) {
+            (br, map) =>
+              val req = br.request
+              val ds = dataSource(req)
+              val v = map.get(ds)
+              v match {
+                case None      => map.updated(ds, List(br))
+                case Some(brs) => map.updated(ds, br :: brs)
               }
+          }
+          */
+          //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
 
-              (ds.name, dsStats)
-            }
-        }
-        //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
+          //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
+          val traverse = Future.traverse(groupedByDataSource) {
+            case (ds, brs) =>
+              val dsT0 = System.currentTimeMillis()
+              val requests = brs.map(_.request)
+              ds.fetch(requests).map { results =>
+                val dsTf = (System.currentTimeMillis() - dsT0).toInt
+                val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
+                assert(requests.length == results.length)
+                (brs zip results) foreach {
+                  case (br, res) =>
+                    br.fetchStatus.update(FetchSuccess(res))
+                }
 
-        for {
-          namesAndStats <- traverse
-          roundTime = (System.currentTimeMillis() - t0).toInt
-          hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()) { case (hm, (dsName, dsStats)) => hm.updated(dsName, dsStats) }
-          roundStats = RoundStats(roundTime, hm)
-          stats = statsAtom()
-        } yield statsAtom.update(stats.copy(stats = roundStats :: stats.stats))
+                (ds.name, dsStats)
+              }
+          }
+          //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
 
-        traverse.flatMap { _ =>
-          cont.run(dataSource)
-        }
+          val statF = for {
+            namesAndStats <- traverse
+            roundTime = (System.currentTimeMillis() - t0).toInt
+            hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()) { case (hm, (dsName, dsStats)) => hm.updated(dsName, dsStats) }
+          } yield RoundStats(roundTime, hm)
+
+          statsFs = statF :: statsFs
+
+          traverse.flatMap { _ =>
+            loop(cont)
+          }
+      }
     }
+    val result = loop(this)
+    val statsF = for {
+      value <- result
+      stats <- Future.sequence(statsFs)
+    } yield Stats(stats)
+    (result, statsF)
   }
 
   def catchF[B >: A](handle: Throwable => Fetch[R, B]): Fetch[R, B] = Fetch { dc =>
@@ -142,12 +151,13 @@ object Fetch {
     }
   }
 
-  def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): Future[(A, DataCache[R], Stats)] = {
+  def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): (Future[(A, DataCache[R])], Future[Stats]) = {
     implicit val dca = Atom(dataCache)
-    implicit val stats = Atom(Stats())
-    for {
-      value <- fetch.run(dataSource)
-    } yield (value, dca(), stats())
+    val (result, statsF) = fetch.run(dataSource)
+    val f = for {
+      value <- result
+    } yield (value, dca())
+    (f, statsF)
   }
 
 }

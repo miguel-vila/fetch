@@ -30,14 +30,15 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
 
       val dataSource = spy(ExampleDataSource)
       def dataSourceF(request: ExampleRequest[_]): DataSource[ExampleRequest] = dataSource
-      whenReady(Fetch.run(pageHTML)(dataSourceF)) {
-        case (html, cache, stats) =>
+      val (resultF, statsF) = Fetch.run(pageHTML)(dataSourceF)
+      whenReady(resultF) {
+        case (html, cache) =>
           html shouldEqual (HTML)
-          stats.numberOfRounds shouldEqual (3)
           def cacheValueAt[A]: ExampleRequest[A] => A = getValueAt(cache)
 
-          verify(dataSource, times(1)).getPostIdsImpl()
           cacheValueAt(GetPostIds) shouldEqual (postsIds)
+
+          verify(dataSource, times(1)).getPostIdsImpl()
 
           postInfoData foreach {
             case (pid, pinfo) =>
@@ -54,26 +55,63 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
           cache.size shouldEqual (cacheSize)
 
       }
+
+      whenReady(statsF) {
+        case stats =>
+          stats.numberOfRounds shouldEqual (3)
+      }
     }
 
     "when replaying with the same cache it just reruns without making any fetch" in {
       val dataSource = spy(ExampleDataSource)
       def dataSourceF(request: ExampleRequest[_]): DataSource[ExampleRequest] = dataSource
-      val future = for {
-        (html1, cache1, stats1) <- Fetch.run(pageHTML)(dataSourceF)
-        (html2, cache2, stats2) <- Fetch.run(pageHTML)(dataSourceF, cache1)
+      val (result1F, stats1F) = Fetch.run(pageHTML)(dataSourceF)
+      val f2 = for {
+        (html1, cache1) <- result1F
+        (result2F, stats2F) = Fetch.run(pageHTML)(dataSourceF, cache1)
+        (html2, cache2) <- result2F
+        stats2 <- stats2F
       } yield {
-        (html1, cache1, stats1, html2, cache2, stats2)
+        (html1, cache1, html2, cache2, stats2)
       }
 
-      whenReady(future) {
-        case (html1, cache1, stats1, html2, cache2, stats2) =>
+      whenReady(result1F) {
+        case (html1, cache1) =>
+          html1 shouldEqual (HTML)
+          def cacheValueAt[A]: ExampleRequest[A] => A = getValueAt(cache1)
+
+          verify(dataSource, times(1)).getPostIdsImpl()
+          cacheValueAt(GetPostIds) shouldEqual (postsIds)
+
+          postInfoData foreach {
+            case (pid, pinfo) =>
+              cacheValueAt(GetPostInfo(pid)) shouldEqual (pinfo)
+              verify(dataSource, times(1)).getPostInfoImpl(pid)
+          }
+          postViewsData foreach {
+            case (pid, pviews) =>
+              cacheValueAt(GetPostViews(pid)) shouldEqual (pviews)
+              verify(dataSource, times(1)).getPostViewsImpl(pid)
+          }
+
+          val cacheSize = 1 /*post ids fetch*/ + postInfoData.size + postViewsData.size + 5 /*los 5 de PostContent*/
+          cache1.size shouldEqual (cacheSize)
+      }
+
+      whenReady(stats1F) {
+        case stats1 =>
+          stats1.numberOfRounds shouldEqual (3)
+      }
+
+      whenReady(f2) {
+        case (html1, cache1, html2, cache2, stats2) =>
           html1 shouldEqual (html2) //Results are the same when replaying
           cache1 shouldEqual (cache2) //Caches should be the same when replaying
           verify(dataSource, times(1)).getPostIdsImpl()
           //@TODO agregar mas verificaciones de llamadas
           stats2.numberOfRounds shouldEqual (0) //Number of rounds should be zero when replaying
       }
+
     }
 
   }

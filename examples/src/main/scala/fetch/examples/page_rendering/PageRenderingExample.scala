@@ -195,18 +195,24 @@ object Test extends PageRenderingExample with App {
   /**
    * Ejecucion
    */
-  Fetch.run(pageHTML)(dataSource).onComplete {
-    case Success((html, cache, stats)) =>
+  val (resultF, statsF) = Fetch.run(pageHTML)(dataSource)
+
+  resultF.onComplete {
+    case Success((html, cache)) =>
       println(s"Success!: $html")
       println("Caché:")
       println(cache)
-      println("Stats:")
-      println(stats)
 
-      println("------ Rerun ------")
+      statsF.onSuccess {
+        case stats =>
+          println("Stats1:")
+          println(stats)
+      }
 
-      Fetch.run(pageHTML)(dataSource, cache).onComplete {
-        case Success((html2, cache2, _)) =>
+      val (resultF2, statsF2) = Fetch.run(pageHTML)(dataSource, cache)
+
+      resultF2.onComplete {
+        case Success((html2, cache2)) =>
           println(s"Success2: $html")
           assert(cache == cache2)
           assert(html == html2)
