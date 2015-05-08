@@ -31,8 +31,7 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
     }
   }
 
-  private def run(dataSource: R[_] => DataSource[R])(implicit executionContext: ExecutionContext,
-                                                     dataCache: Atom[DataCache[R]]): (Future[A], Future[Stats]) = {
+  private def run(dataSource: R[_] => DataSource[R], dataCache: Atom[DataCache[R]])(implicit executionContext: ExecutionContext): (Future[A], Future[Stats]) = {
     var statsFs = List.empty[Future[RoundStats]]
 
     def loop(fetch: Fetch[R, A]): Future[A] = {
@@ -152,8 +151,8 @@ object Fetch {
   }
 
   def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): (Future[(A, DataCache[R])], Future[Stats]) = {
-    implicit val dca = Atom(dataCache)
-    val (result, statsF) = fetch.run(dataSource)
+    val dca = Atom(dataCache)
+    val (result, statsF) = fetch.run(dataSource, dca)
     val f = for {
       value <- result
     } yield (value, dca())
