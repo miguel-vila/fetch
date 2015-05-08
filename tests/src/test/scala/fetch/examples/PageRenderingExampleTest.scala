@@ -15,7 +15,7 @@ import org.mockito.Mockito._
  */
 class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRenderingExample with Matchers with MockitoSugar {
 
-  val patience =
+  implicit val patience =
     PatienceConfig(timeout = Span(1, Seconds), interval = Span(15, Millis))
 
   "PageRenderingExample" must {
@@ -53,7 +53,7 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
           val cacheSize = 1 /*post ids fetch*/ + postInfoData.size + postViewsData.size + 5 /*los 5 de PostContent*/
           cache.size shouldEqual (cacheSize)
 
-      }(patience)
+      }
     }
 
     "when replaying with the same cache it just reruns without making any fetch" in {
@@ -73,7 +73,7 @@ class PageRenderingExampleTest extends WordSpec with ScalaFutures with PageRende
           verify(dataSource, times(1)).getPostIdsImpl()
           //@TODO agregar mas verificaciones de llamadas
           stats2.numberOfRounds shouldEqual (0) //Number of rounds should be zero when replaying
-      }(patience)
+      }
     }
 
   }
