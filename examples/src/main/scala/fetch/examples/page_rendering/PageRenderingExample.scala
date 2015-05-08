@@ -195,7 +195,7 @@ object Test extends PageRenderingExample with App {
   /**
    * Ejecucion
    */
-  val (resultF, statsF) = Fetch.run(pageHTML)(dataSource)
+  val resultF = Fetch.run(pageHTML)(dataSource)
 
   resultF.onComplete {
     case Success((html, cache)) =>
@@ -203,13 +203,7 @@ object Test extends PageRenderingExample with App {
       println("Caché:")
       println(cache)
 
-      statsF.onSuccess {
-        case stats =>
-          println("Stats1:")
-          println(stats)
-      }
-
-      val (resultF2, statsF2) = Fetch.run(pageHTML)(dataSource, cache)
+      val resultF2 = Fetch.run(pageHTML)(dataSource, cache)
 
       resultF2.onComplete {
         case Success((html2, cache2)) =>
