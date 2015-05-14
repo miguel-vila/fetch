@@ -1,6 +1,5 @@
 package fetch
 
-import scala.collection.immutable.HashMap
 import scala.concurrent.{ ExecutionContext, Future }
 import scalaz.{ DList, Monad, Applicative, Traverse }
 
@@ -31,20 +30,15 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
     }
   }
 
-  private def run(dataSource: R[_] => DataSource[R], dataCache: Atom[DataCache[R]])(implicit executionContext: ExecutionContext): (Future[A], Future[Stats]) = {
-    var statsFs = List.empty[Future[RoundStats]]
+  private def run(dataSource: R[_] => DataSource[R], dataCache: Atom[DataCache[R]])(implicit executionContext: ExecutionContext): Future[A] = {
+    result(dataCache) match {
+      case Done(a)  => Future.successful(a)
+      case Throw(t) => Future.failed(t)
+      case Blocked(brs, cont) =>
+        // @TODO ver que la siguiente conversión a lista no tenga consecuencias de performance v.s. hacer el groupBy a mano como se muestra abajo
+        val groupedByDataSource = brs.toList.groupBy(br => dataSource(br.request))
 
-    def loop(fetch: Fetch[R, A]): Future[A] = {
-      fetch.result(dataCache) match {
-        case Done(a)  => Future.successful(a)
-        case Throw(t) => Future.failed(t)
-        case Blocked(brs, cont) =>
-          val t0 = System.currentTimeMillis()
-
-          // @TODO ver que la siguiente conversión a lista no tenga consecuencias de performance v.s. hacer el groupBy a mano como se muestra abajo
-          val groupedByDataSource = brs.toList.groupBy(br => dataSource(br.request))
-
-          /*
+        /*
           val groupedByDataSource = brs.foldr(Map[DataSource[R], List[BlockedRequest[R, _]]]()) {
             (br, map) =>
               val req = br.request
@@ -56,46 +50,24 @@ case class Fetch[R[_], +A](result: Atom[DataCache[R]] => Result[R, A]) {
               }
           }
           */
-          //@TODO para recolectar estadísticas éste código queda con muchas cosas, tal vez haya alguna forma de separarlo?
-
-          //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
-          val traverse = Future.traverse(groupedByDataSource) {
-            case (ds, brs) =>
-              val dsT0 = System.currentTimeMillis()
-              val requests = brs.map(_.request)
-              ds.fetch(requests).map { results =>
-                val dsTf = (System.currentTimeMillis() - dsT0).toInt
-                val dsStats = DataSourceRoundStats(dataSourceFetches = brs.length, dataSourceTimeMillis = dsTf)
-                assert(requests.length == results.length)
-                (brs zip results) foreach {
-                  case (br, res) =>
-                    br.fetchStatus.update(FetchSuccess(res))
-                }
-
-                (ds.name, dsStats)
+        //@TODO si alguno de los siguientes falla entonces el futuro falla. Como almacenar el [[FetchFailure]] en ese caso?
+        val traverse = Future.traverse(groupedByDataSource) {
+          case (ds, brs) =>
+            val requests = brs.map(_.request)
+            ds.fetch(requests).map { results =>
+              assert(requests.length == results.length)
+              (brs zip results) foreach {
+                case (br, res) =>
+                  br.fetchStatus.update(FetchSuccess(res))
               }
-          }
-          //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
+            }
+        }
+        //@TODO es posible que esto lo haga el compilador? saber qué datasource llamar según el tipo del request?
 
-          val statF = for {
-            namesAndStats <- traverse
-            roundTime = (System.currentTimeMillis() - t0).toInt
-            hm = namesAndStats.foldLeft(HashMap[String, DataSourceRoundStats]()) { case (hm, (dsName, dsStats)) => hm.updated(dsName, dsStats) }
-          } yield RoundStats(roundTime, hm)
-
-          statsFs = statF :: statsFs
-
-          traverse.flatMap { _ =>
-            loop(cont)
-          }
-      }
+        traverse.flatMap { _ =>
+          cont.run(dataSource, dataCache)
+        }
     }
-    val result = loop(this)
-    val statsF = for {
-      value <- result
-      stats <- Future.sequence(statsFs)
-    } yield Stats(stats)
-    (result, statsF)
   }
 
   def catchF[B >: A](handle: Throwable => Fetch[R, B]): Fetch[R, B] = Fetch { dc =>
@@ -150,13 +122,11 @@ object Fetch {
     }
   }
 
-  def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): (Future[(A, DataCache[R])], Future[Stats]) = {
+  def run[R[_], A](fetch: Fetch[R, A])(dataSource: R[_] => DataSource[R], dataCache: DataCache[R] = DataCache[R]())(implicit executionContext: ExecutionContext): Future[(A, DataCache[R])] = {
     val dca = Atom(dataCache)
-    val (result, statsF) = fetch.run(dataSource, dca)
-    val f = for {
-      value <- result
-    } yield (value, dca())
-    (f, statsF)
+    for {
+      result <- fetch.run(dataSource, dca)
+    } yield (result, dca())
   }
 
 }
